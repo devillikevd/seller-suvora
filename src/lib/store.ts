@@ -19,22 +19,6 @@ import type {
   Settlement,
   ActivityItem,
 } from "@/types";
-import {
-  mockStore,
-  mockSeller,
-  mockProducts,
-  mockCategories,
-  mockOrders,
-  mockCustomers,
-  mockOffers,
-  mockInventory,
-  mockStockHistory,
-  mockNotifications,
-  mockStaff,
-  mockTransactions,
-  mockSettlements,
-  mockActivities,
-} from "@/mock/data";
 
 // ---- Auth Store ----
 export function normalizeStore(rawStore: any): Store | null {
@@ -135,7 +119,7 @@ interface ProductsStore {
 }
 
 export const useProductsStore = create<ProductsStore>((set) => ({
-  products: mockProducts,
+  products: [],
   addProduct: (product) =>
     set((state) => ({ products: [product, ...state.products] })),
   updateProduct: (id, data) =>
@@ -167,7 +151,7 @@ interface CategoriesStore {
 }
 
 export const useCategoriesStore = create<CategoriesStore>((set) => ({
-  categories: mockCategories,
+  categories: [],
   addCategory: (category) =>
     set((state) => ({ categories: [category, ...state.categories] })),
   updateCategory: (id, data) =>
@@ -190,7 +174,7 @@ interface OrdersStore {
 }
 
 export const useOrdersStore = create<OrdersStore>((set, get) => ({
-  orders: mockOrders,
+  orders: [],
   updateOrderStatus: (id, status) =>
     set((state) => ({
       orders: state.orders.map((o) =>
@@ -220,7 +204,7 @@ interface CustomersStore {
 }
 
 export const useCustomersStore = create<CustomersStore>(() => ({
-  customers: mockCustomers,
+  customers: [],
 }));
 
 // ---- Offers Store ----
@@ -233,7 +217,7 @@ interface OffersStore {
 }
 
 export const useOffersStore = create<OffersStore>((set) => ({
-  offers: mockOffers,
+  offers: [],
   addOffer: (offer) =>
     set((state) => ({ offers: [offer, ...state.offers] })),
   updateOffer: (id, data) =>
@@ -264,8 +248,8 @@ interface InventoryStore {
 }
 
 export const useInventoryStore = create<InventoryStore>((set) => ({
-  inventory: mockInventory,
-  stockHistory: mockStockHistory,
+  inventory: [],
+  stockHistory: [],
   adjustStock: (productId, type, quantity, reason, notes) =>
     set((state) => {
       const adjustment: StockAdjustment = {
@@ -311,7 +295,7 @@ interface NotificationsStore {
 }
 
 export const useNotificationsStore = create<NotificationsStore>((set, get) => ({
-  notifications: mockNotifications,
+  notifications: [],
   markAsRead: (id) =>
     set((state) => ({
       notifications: state.notifications.map((n) =>
@@ -335,7 +319,7 @@ interface StaffStore {
 }
 
 export const useStaffStore = create<StaffStore>((set) => ({
-  staff: mockStaff,
+  staff: [],
   addStaff: (member) =>
     set((state) => ({ staff: [member, ...state.staff] })),
   updateStaff: (id, data) =>
@@ -361,8 +345,8 @@ interface FinanceStore {
 }
 
 export const useFinanceStore = create<FinanceStore>(() => ({
-  transactions: mockTransactions,
-  settlements: mockSettlements,
+  transactions: [],
+  settlements: [],
 }));
 
 // ---- Activity Store ----
@@ -371,7 +355,7 @@ interface ActivityStore {
 }
 
 export const useActivityStore = create<ActivityStore>(() => ({
-  activities: mockActivities,
+  activities: [],
 }));
 
 // ---- UI Store ----

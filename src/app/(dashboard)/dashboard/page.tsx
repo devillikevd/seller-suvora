@@ -14,17 +14,20 @@ import {
   Clock,
   Star,
   Send,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "@/components/common";
 import {
   useAuthStore,
   useOrdersStore,
+  useProductsStore,
 } from "@/lib/store";
 import type { OrderStatus } from "@/types";
 
 export default function DashboardPage() {
   const { store, seller, updateStore } = useAuthStore();
   const { orders, updateOrderStatus } = useOrdersStore();
+  const { products } = useProductsStore();
 
   const [dateRange, setDateRange] = useState<"all" | "today" | "week" | "month">("all");
   const [orderTab, setOrderTab] = useState<"all" | "new" | "preparing" | "ready" | "completed">("all");
@@ -60,61 +63,17 @@ export default function DashboardPage() {
   const readyCount = orders.filter((o) => o.status === "ready").length;
   const completedCount = orders.filter((o) => o.status === "completed").length;
 
-  // Bredar Signature Customer Avatars for Engagement Banner
-  const bannerCustomers = [
-    {
-      name: "Courtney Henry",
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80",
-    },
-    {
-      name: "Jenny Wilson",
-      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80&auto=format&fit=crop&q=80",
-    },
-    {
-      name: "Cameron Williamson",
-      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&auto=format&fit=crop&q=80",
-    },
-    {
-      name: "Priya Sharma",
-      avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=80&auto=format&fit=crop&q=80",
-    },
-  ];
+  // Real store metrics
+  const totalRevenue = orders
+    .filter((o) => o.status === "completed")
+    .reduce((sum, o) => sum + o.total, 0);
+  const totalOrdersCount = orders.length;
+  const uniqueCustomersCount = new Set(orders.map((o) => o.customer?.phone || o.id)).size;
+  const avgOrderValue = completedCount > 0 ? totalRevenue / completedCount : 0;
+  const lowStockCount = products.filter((p) => p.stock <= 5).length;
 
-  // Bredar Top Products list
-  const topProducts = [
-    {
-      name: "Fortune Sunlite Oil (5L)",
-      category: "Edible Oil & Ghee",
-      price: "₹650.00",
-      stock: 8,
-      sold: 412,
-      image: "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=100&auto=format&fit=crop&q=80",
-    },
-    {
-      name: "India Gate Basmati Rice (5kg)",
-      category: "Rice & Grains",
-      price: "₹450.00",
-      stock: 18,
-      sold: 384,
-      image: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=100&auto=format&fit=crop&q=80",
-    },
-    {
-      name: "Amul Fresh Butter (500g)",
-      category: "Dairy & Eggs",
-      price: "₹275.00",
-      stock: 14,
-      sold: 215,
-      image: "https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=100&auto=format&fit=crop&q=80",
-    },
-    {
-      name: "Surf Excel Liquid (1L)",
-      category: "Household Cleaning",
-      price: "₹220.00",
-      stock: 44,
-      sold: 196,
-      image: "https://images.unsplash.com/photo-1585842378054-ee2e52f94ba2?w=100&auto=format&fit=crop&q=80",
-    },
-  ];
+  // Products from store catalog
+  const topProducts = products.slice(0, 4);
 
   // Quick order status transition
   const handleQuickStatusUpdate = (orderId: string, currentStatus: OrderStatus) => {
@@ -169,7 +128,7 @@ export default function DashboardPage() {
             </button>
           </div>
           <p className="text-xs text-slate-500">
-            Welcome back, <span className="font-semibold text-slate-800">{seller?.name || "Rajesh Kumar"}</span> 👋 • Managing {store?.name || "FreshMart General Store"}, Koramangala Hub
+            Welcome back, <span className="font-semibold text-slate-800">{seller?.name || "Merchant Owner"}</span> 👋 • Managing {store?.name || "My Store"}
           </p>
         </div>
 
@@ -220,12 +179,16 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">₹48,250</span>
-            <span className="inline-flex items-center text-xs font-bold text-emerald-600">
-              <TrendingUp className="w-3 h-3 mr-0.5" /> +37.8%
-            </span>
+            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">₹{totalRevenue.toLocaleString("en-IN")}</span>
+            {totalRevenue > 0 && (
+              <span className="inline-flex items-center text-xs font-bold text-emerald-600">
+                <TrendingUp className="w-3 h-3 mr-0.5" /> +100%
+              </span>
+            )}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">vs ₹40,740 last month</p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {totalRevenue > 0 ? "Live gross revenue" : "Ready for your first customer order"}
+          </p>
         </div>
 
         {/* Metric 2: Total Orders */}
@@ -237,12 +200,16 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">1,842</span>
-            <span className="inline-flex items-center text-xs font-bold text-emerald-600">
-              <TrendingUp className="w-3 h-3 mr-0.5" /> +12.4%
-            </span>
+            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">{totalOrdersCount}</span>
+            {newOrdersCount > 0 && (
+              <span className="inline-flex items-center text-xs font-bold text-blue-600">
+                {newOrdersCount} new
+              </span>
+            )}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">68 today • 16 in progress</p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {totalOrdersCount > 0 ? `${newOrdersCount} in progress` : "0 in queue • Store online"}
+          </p>
         </div>
 
         {/* Metric 3: Avg Order Value */}
@@ -254,12 +221,11 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">₹709.50</span>
-            <span className="inline-flex items-center text-xs font-bold text-emerald-600">
-              <TrendingUp className="w-3 h-3 mr-0.5" /> +6.8%
-            </span>
+            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">₹{avgOrderValue.toFixed(2)}</span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">4.6 items average cart size</p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {totalOrdersCount > 0 ? "Average cart realization" : "Calculated upon first completed order"}
+          </p>
         </div>
 
         {/* Metric 4: Dispatch SLA */}
@@ -271,9 +237,11 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">8.4 mins</span>
+            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">
+              {orders.length > 0 ? "8.4 mins" : "Ready"}
+            </span>
             <span className="inline-flex items-center text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-              ⚡ Fast SLA
+              ⚡ Instant SLA
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mt-1">SUVORA Target: &lt;15 mins</p>
@@ -292,7 +260,7 @@ export default function DashboardPage() {
                 <span className="text-xs font-semibold text-slate-500 block">Total customers</span>
                 <div className="flex items-baseline gap-3 mt-1.5">
                   <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                    68,192 customers
+                    {uniqueCustomersCount} customers
                   </h2>
                   <span className="inline-flex items-center text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">
                     ▲ 37.8% vs. Sept 8, 2021
@@ -393,22 +361,20 @@ export default function DashboardPage() {
           {/* SIGNATURE BREDAR BOTTOM BANNER INSIDE CARD */}
           <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
             <div className="flex items-center gap-3">
-              {/* Avatars group */}
-              <div className="flex -space-x-2 overflow-hidden shrink-0">
-                {bannerCustomers.map((c, i) => (
-                  <img
-                    key={i}
-                    src={c.avatar}
-                    alt={c.name}
-                    className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover"
-                  />
-                ))}
+              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
+                <Sparkles className="w-4 h-4" />
               </div>
               <div className="text-xs">
                 <p className="font-bold text-slate-800">
-                  Welcome 291 customers with a personal offer 😎
+                  {uniqueCustomersCount > 0
+                    ? `Engage ${uniqueCustomersCount} verified store shoppers 😎`
+                    : "Your storefront is live on SUVORA"}
                 </p>
-                <p className="text-[11px] text-slate-500">Active shoppers in Koramangala &amp; HSR Hub</p>
+                <p className="text-[11px] text-slate-500">
+                  {uniqueCustomersCount > 0
+                    ? "Send personalized discount offers to boost re-orders."
+                    : "Nearby customers in your delivery radius will discover your store."}
+                </p>
               </div>
             </div>
 
@@ -417,7 +383,7 @@ export default function DashboardPage() {
               className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-2xs shrink-0 self-end sm:self-auto"
             >
               <Send className="w-3 h-3" />
-              <span>Send message</span>
+              <span>Broadcast Offer</span>
             </button>
           </div>
         </div>
@@ -517,21 +483,21 @@ export default function DashboardPage() {
       <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xs">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-blue-100 shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-            <span className="text-xs font-bold text-slate-800">10 Orders to Pack</span>
+            <span className={`w-2 h-2 rounded-full ${preparingCount > 0 ? "bg-amber-500 animate-pulse" : "bg-slate-300"}`} />
+            <span className="text-xs font-bold text-slate-800">{preparingCount} Orders to Pack</span>
             <span className="text-[10px] text-slate-500">• SLA &lt; 15m</span>
           </div>
 
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-blue-100 shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-red-500" />
-            <span className="text-xs font-bold text-slate-800">3 Low Stock Alerts</span>
-            <span className="text-[10px] text-slate-500">• Fortune Oil, Tata Tea</span>
+            <span className={`w-2 h-2 rounded-full ${lowStockCount > 0 ? "bg-red-500" : "bg-emerald-500"}`} />
+            <span className="text-xs font-bold text-slate-800">{lowStockCount} Low Stock Alerts</span>
+            <span className="text-[10px] text-slate-500">• Inventory Status</span>
           </div>
 
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-blue-100 shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-blue-600" />
-            <span className="text-xs font-bold text-slate-800">3 Orders Ready</span>
-            <span className="text-[10px] text-slate-500">• Rider arriving 3m</span>
+            <span className={`w-2 h-2 rounded-full ${readyCount > 0 ? "bg-blue-600 animate-pulse" : "bg-slate-300"}`} />
+            <span className="text-xs font-bold text-slate-800">{readyCount} Orders Ready</span>
+            <span className="text-[10px] text-slate-500">• Rider Handover</span>
           </div>
         </div>
 
@@ -639,75 +605,85 @@ export default function DashboardPage() {
 
             {/* Orders Table Rows */}
             <div className="mt-3 divide-y divide-slate-100">
-              {displayedOrders.slice(0, 4).map((order) => {
-                const isNew = order.status === "new" || order.status === "accepted";
-                const isPacking = order.status === "preparing";
-                const isReady = order.status === "ready";
+              {displayedOrders.length === 0 ? (
+                <div className="py-12 text-center space-y-2">
+                  <ShoppingBag className="w-9 h-9 text-slate-300 mx-auto" />
+                  <p className="text-sm font-bold text-slate-800">No Orders in Queue</p>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    Your store is online and ready. When local customers place orders, they will appear here in real-time.
+                  </p>
+                </div>
+              ) : (
+                displayedOrders.slice(0, 4).map((order) => {
+                  const isNew = order.status === "new" || order.status === "accepted";
+                  const isPacking = order.status === "preparing";
+                  const isReady = order.status === "ready";
 
-                return (
-                  <div key={order.id} className="py-3.5 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 uppercase tracking-wider ${
-                          isNew
-                            ? "bg-blue-50 text-blue-600 border border-blue-200"
-                            : isPacking
-                            ? "bg-amber-50 text-amber-600 border border-amber-200"
-                            : isReady
-                            ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
-                            : "bg-slate-100 text-slate-700"
-                        }`}
-                      >
-                        {isNew ? "NEW" : isPacking ? "PACK" : isReady ? "READY" : "DONE"}
-                      </span>
-                      <div className="min-w-0">
-                        <span className="font-bold text-xs text-slate-900 block">
-                          {order.orderNumber} • {order.customer.name}
+                  return (
+                    <div key={order.id} className="py-3.5 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 uppercase tracking-wider ${
+                            isNew
+                              ? "bg-blue-50 text-blue-600 border border-blue-200"
+                              : isPacking
+                              ? "bg-amber-50 text-amber-600 border border-amber-200"
+                              : isReady
+                              ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {isNew ? "NEW" : isPacking ? "PACK" : isReady ? "READY" : "DONE"}
                         </span>
-                        <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                          {order.items.map((it) => `${it.productName} (${it.quantity}x)`).join(", ")}
-                        </p>
+                        <div className="min-w-0">
+                          <span className="font-bold text-xs text-slate-900 block">
+                            {order.orderNumber} • {order.customer.name}
+                          </span>
+                          <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                            {order.items.map((it) => `${it.productName} (${it.quantity}x)`).join(", ")}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-slate-900 block">
+                            ₹{order.total.toLocaleString("en-IN")}
+                          </span>
+                          <span className="text-[10px] font-semibold text-emerald-600">
+                            {order.paymentMethod.toUpperCase()} Paid
+                          </span>
+                        </div>
+
+                        {isNew && (
+                          <button
+                            onClick={() => handleQuickStatusUpdate(order.id, order.status)}
+                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-2xs"
+                          >
+                            Accept
+                          </button>
+                        )}
+                        {isPacking && (
+                          <button
+                            onClick={() => handleQuickStatusUpdate(order.id, order.status)}
+                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 transition-all shadow-2xs"
+                          >
+                            Pack
+                          </button>
+                        )}
+                        {isReady && (
+                          <button
+                            onClick={() => handleQuickStatusUpdate(order.id, order.status)}
+                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-all shadow-2xs"
+                          >
+                            Handover
+                          </button>
+                        )}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="text-right">
-                        <span className="text-xs font-bold text-slate-900 block">
-                          ₹{order.total.toLocaleString("en-IN")}
-                        </span>
-                        <span className="text-[10px] font-semibold text-emerald-600">
-                          {order.paymentMethod.toUpperCase()} Paid
-                        </span>
-                      </div>
-
-                      {isNew && (
-                        <button
-                          onClick={() => handleQuickStatusUpdate(order.id, order.status)}
-                          className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-2xs"
-                        >
-                          Accept
-                        </button>
-                      )}
-                      {isPacking && (
-                        <button
-                          onClick={() => handleQuickStatusUpdate(order.id, order.status)}
-                          className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 transition-all shadow-2xs"
-                        >
-                          Pack
-                        </button>
-                      )}
-                      {isReady && (
-                        <button
-                          onClick={() => handleQuickStatusUpdate(order.id, order.status)}
-                          className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-all shadow-2xs"
-                        >
-                          Handover
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
 
             <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
@@ -742,35 +718,50 @@ export default function DashboardPage() {
 
             {/* Rows */}
             <div className="divide-y divide-slate-100">
-              {topProducts.map((prod, i) => (
-                <div key={i} className="py-3 flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <img
-                      src={prod.image}
-                      alt={prod.name}
-                      className="w-9 h-9 rounded-xl object-cover shrink-0 ring-1 ring-slate-100"
-                    />
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-900 truncate leading-tight">
-                        {prod.name}
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{prod.price}</p>
-                    </div>
-                  </div>
-
-                  <span
-                    className={`w-16 text-center font-bold text-xs ${
-                      prod.stock < 10 ? "text-red-600 bg-red-50 py-0.5 rounded-md" : "text-slate-800"
-                    }`}
+              {topProducts.length === 0 ? (
+                <div className="py-8 text-center space-y-2">
+                  <Package className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="text-xs font-bold text-slate-700">No products added yet</p>
+                  <p className="text-[11px] text-slate-400">
+                    Add items to your catalog to track views and sales.
+                  </p>
+                  <Link
+                    href="/products/new"
+                    className="inline-flex items-center gap-1 mt-1 text-xs font-bold text-blue-600 hover:underline"
                   >
-                    {prod.stock}
-                  </span>
-
-                  <span className="w-16 text-right font-bold text-xs text-slate-900">
-                    {prod.sold}
-                  </span>
+                    <span>Add product</span>
+                    <Plus className="w-3 h-3" />
+                  </Link>
                 </div>
-              ))}
+              ) : (
+                topProducts.map((prod) => (
+                  <div key={prod.id} className="py-3 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 font-bold flex items-center justify-center shrink-0">
+                        <Package className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 truncate leading-tight">
+                          {prod.name}
+                        </p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">₹{prod.price}</p>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`w-16 text-center font-bold text-xs ${
+                        prod.stock < 10 ? "text-red-600 bg-red-50 py-0.5 rounded-md" : "text-slate-800"
+                      }`}
+                    >
+                      {prod.stock}
+                    </span>
+
+                    <span className="w-16 text-right font-bold text-xs text-slate-900">
+                      0
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 

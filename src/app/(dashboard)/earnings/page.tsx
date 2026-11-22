@@ -37,6 +37,23 @@ export default function EarningsPage() {
     return t.type === filterType;
   });
 
+  // Calculate dynamic totals from actual transaction logs
+  const grossSales = transactions
+    .filter((t) => t.type === "sale")
+    .reduce((sum, t) => sum + t.amount, 0);
+  const platformFee = grossSales * 0.05;
+  const customerRefunds = transactions
+    .filter((t) => t.type === "refund")
+    .reduce((sum, t) => sum + t.amount, 0);
+  const netPayout = Math.max(0, grossSales - platformFee - customerRefunds);
+
+  const pendingSettlement = settlements
+    .filter((s) => s.status === "processing" || s.status === "pending")
+    .reduce((sum, s) => sum + s.amount, 0);
+  const completedBankPayouts = settlements
+    .filter((s) => s.status === "completed")
+    .reduce((sum, s) => sum + s.amount, 0);
+
   const handleDownload = () => {
     toast.success("GST and Earnings statement downloaded (PDF & CSV).", "Statement Exported");
   };
@@ -62,8 +79,8 @@ export default function EarningsPage() {
         <div className="bg-white p-5 rounded-2xl border border-purple-100/70 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase">Gross Sales</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-1">₹2,84,500</h3>
-            <span className="text-[11px] text-emerald-600 font-semibold">+12.5% vs last month</span>
+            <h3 className="text-2xl font-black text-slate-900 mt-1">{formatCurrency(grossSales)}</h3>
+            <span className="text-[11px] text-emerald-600 font-semibold">{grossSales > 0 ? "+100% vs last month" : "Awaiting first order"}</span>
           </div>
           <div className="p-3 bg-purple-50 text-purple-600 rounded-xl">
             <IndianRupee className="w-5 h-5" />
@@ -73,7 +90,7 @@ export default function EarningsPage() {
         <div className="bg-white p-5 rounded-2xl border border-purple-100/70 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase">Platform Fee (5%)</p>
-            <h3 className="text-2xl font-black text-slate-700 mt-1">₹14,225</h3>
+            <h3 className="text-2xl font-black text-slate-700 mt-1">{formatCurrency(platformFee)}</h3>
             <span className="text-[11px] text-slate-400">Fixed merchant commission</span>
           </div>
           <div className="p-3 bg-slate-100 text-slate-600 rounded-xl">
@@ -84,8 +101,8 @@ export default function EarningsPage() {
         <div className="bg-white p-5 rounded-2xl border border-purple-100/70 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase">Customer Refunds</p>
-            <h3 className="text-2xl font-black text-rose-600 mt-1">₹4,200</h3>
-            <span className="text-[11px] text-slate-400">1.4% refund rate</span>
+            <h3 className="text-2xl font-black text-rose-600 mt-1">{formatCurrency(customerRefunds)}</h3>
+            <span className="text-[11px] text-slate-400">0.0% refund rate</span>
           </div>
           <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
             <ArrowDownLeft className="w-5 h-5" />
@@ -95,8 +112,8 @@ export default function EarningsPage() {
         <div className="bg-gradient-to-tr from-purple-900 to-indigo-900 text-white p-5 rounded-2xl shadow-md flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-purple-200 uppercase">Net Merchant Payout</p>
-            <h3 className="text-2xl font-black text-white mt-1">₹2,66,075</h3>
-            <span className="text-[11px] text-emerald-300 font-medium">93.5% realization</span>
+            <h3 className="text-2xl font-black text-white mt-1">{formatCurrency(netPayout)}</h3>
+            <span className="text-[11px] text-emerald-300 font-medium">95.0% realization</span>
           </div>
           <div className="p-3 bg-white/10 text-white rounded-xl backdrop-blur-xs">
             <CheckCircle2 className="w-5 h-5 text-emerald-300" />
@@ -109,15 +126,15 @@ export default function EarningsPage() {
         <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
           <p className="text-xs font-semibold text-slate-400 uppercase">Pending Next Settlement</p>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-xl font-black text-amber-600">₹52,100</span>
-            <span className="text-xs text-slate-400">(T+1 releasing tomorrow)</span>
+            <span className="text-xl font-black text-amber-600">{formatCurrency(pendingSettlement)}</span>
+            <span className="text-xs text-slate-400">(T+1 rolling schedule)</span>
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
           <p className="text-xs font-semibold text-slate-400 uppercase">Completed Bank Payouts</p>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-xl font-black text-emerald-600">₹2,13,975</span>
+            <span className="text-xl font-black text-emerald-600">{formatCurrency(completedBankPayouts)}</span>
             <span className="text-xs text-slate-400">Direct NEFT transfers</span>
           </div>
         </div>
@@ -125,7 +142,7 @@ export default function EarningsPage() {
         <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
           <p className="text-xs font-semibold text-slate-400 uppercase">Registered Bank Account</p>
           <p className="text-xs font-bold text-slate-800 mt-1">
-            HDFC Bank ••••••4521 (IFSC: HDFC0001234)
+            Bank account unlinked (Link via Store Settings)
           </p>
         </div>
       </div>
@@ -226,38 +243,46 @@ export default function EarningsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredTransactions.slice(0, 8).map((txn) => {
-                  const isCredit = txn.type === "sale" || txn.type === "payout";
+                {filteredTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-xs text-slate-400">
+                      No payment transactions recorded yet. Live order earnings will appear here.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTransactions.slice(0, 8).map((txn) => {
+                    const isCredit = txn.type === "sale" || txn.type === "payout";
 
-                  return (
-                    <tr key={txn.id} className="text-xs hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-3 text-slate-400">
-                        {formatDate(txn.date)}
-                      </td>
-                      <td className="py-3 px-3 font-mono font-semibold text-slate-700">
-                        {txn.id}
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="capitalize font-semibold text-slate-700 px-2 py-0.5 rounded-md bg-slate-100">
-                          {txn.type}
-                        </span>
-                      </td>
-                      <td className={`py-3 px-3 text-right font-bold ${
-                        isCredit ? "text-emerald-700" : "text-rose-600"
-                      }`}>
-                        {isCredit ? "+" : "-"} {formatCurrency(txn.amount)}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <StatusBadge
-                          variant={txn.status === "completed" ? "success" : "warning"}
-                          size="sm"
-                        >
-                          {txn.status.toUpperCase()}
-                        </StatusBadge>
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr key={txn.id} className="text-xs hover:bg-slate-50/60 transition-colors">
+                        <td className="py-3 px-3 text-slate-400">
+                          {formatDate(txn.date)}
+                        </td>
+                        <td className="py-3 px-3 font-mono font-semibold text-slate-700">
+                          {txn.id}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="capitalize font-semibold text-slate-700 px-2 py-0.5 rounded-md bg-slate-100">
+                            {txn.type}
+                          </span>
+                        </td>
+                        <td className={`py-3 px-3 text-right font-bold ${
+                          isCredit ? "text-emerald-700" : "text-rose-600"
+                        }`}>
+                          {isCredit ? "+" : "-"} {formatCurrency(txn.amount)}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <StatusBadge
+                            variant={txn.status === "completed" ? "success" : "warning"}
+                            size="sm"
+                          >
+                            {txn.status.toUpperCase()}
+                          </StatusBadge>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -271,38 +296,44 @@ export default function EarningsPage() {
           </div>
 
           <div className="space-y-3">
-            {settlements.map((stl) => (
-              <div
-                key={stl.id}
-                className="p-4 rounded-xl border border-slate-100 bg-slate-50/60 flex items-center justify-between"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-bold text-slate-900">{stl.period}</p>
-                    <StatusBadge
-                      variant={stl.status === "completed" ? "success" : "warning"}
-                      size="sm"
-                    >
-                      {stl.status.toUpperCase()}
-                    </StatusBadge>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    {stl.transactionCount} orders aggregated
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-sm font-black text-slate-900">
-                    {formatCurrency(stl.amount)}
-                  </p>
-                  {stl.paidAt && (
-                    <p className="text-[10px] text-emerald-600 font-semibold">
-                      Paid on {formatDate(stl.paidAt)}
-                    </p>
-                  )}
-                </div>
+            {settlements.length === 0 ? (
+              <div className="py-10 text-center text-xs text-slate-400">
+                No bank payouts processed yet. Automated payouts occur on a rolling T+1 schedule.
               </div>
-            ))}
+            ) : (
+              settlements.map((stl) => (
+                <div
+                  key={stl.id}
+                  className="p-4 rounded-xl border border-slate-100 bg-slate-50/60 flex items-center justify-between"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-bold text-slate-900">{stl.period}</p>
+                      <StatusBadge
+                        variant={stl.status === "completed" ? "success" : "warning"}
+                        size="sm"
+                      >
+                        {stl.status.toUpperCase()}
+                      </StatusBadge>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {stl.transactionCount} orders aggregated
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-sm font-black text-slate-900">
+                      {formatCurrency(stl.amount)}
+                    </p>
+                    {stl.paidAt && (
+                      <p className="text-[10px] text-emerald-600 font-semibold">
+                        Paid on {formatDate(stl.paidAt)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

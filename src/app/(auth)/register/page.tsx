@@ -5,11 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { User, Mail, Phone, Lock, Eye, EyeOff, ArrowRight, Store, Loader2, Sparkles } from "lucide-react";
 import { FormField, toast } from "@/components/common";
-import { useAuthStore } from "@/lib/store";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { login } = useAuthStore();
 
   const [fullName, setFullName] = useState("");
   const [storeName, setStoreName] = useState("");
@@ -62,7 +60,7 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/auth/register", {
+      const response = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -78,20 +76,28 @@ export default function RegisterPage() {
 
       if (!response.ok) {
         toast.error(
-          data.error || "Registration failed. Please check your details and try again.",
+          data.error || "Failed to dispatch verification code.",
           "Registration Failed"
         );
         setIsLoading(false);
         return;
       }
 
-      // Update state with newly registered seller & store
-      login(data.seller, data.store);
-      toast.success(
-        data.message || `Welcome to SUVORA, ${data.seller.name}! Your store is ready.`,
-        "Registration Complete"
+      // Save pending verification info in sessionStorage for the /verify screen
+      sessionStorage.setItem(
+        "suvora_pending_verification",
+        JSON.stringify({
+          email: data.email,
+          phone: data.phone,
+          otp: data.otp,
+        })
       );
-      router.push("/dashboard");
+
+      toast.success(
+        "Verification code dispatched to your email and phone!",
+        "OTP Dispatched"
+      );
+      router.push("/verify");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Network error. Please try again.";
       toast.error(msg, "Connection Error");
@@ -140,6 +146,8 @@ export default function RegisterPage() {
             <Store className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
             <input
               type="text"
+              name="reg_store_name"
+              autoComplete="off"
               value={storeName}
               onChange={(e) => setStoreName(e.target.value)}
               placeholder={fullName ? `${fullName}'s Store` : "e.g. Ramesh Kirana & Daily Needs"}
@@ -246,11 +254,11 @@ export default function RegisterPage() {
           {isLoading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Creating your merchant account...</span>
+              <span>Sending verification code...</span>
             </>
           ) : (
             <>
-              <span>Complete Registration</span>
+              <span>Verify Mobile & Email (OTP)</span>
               <ArrowRight className="w-4 h-4" />
             </>
           )}
