@@ -37,11 +37,52 @@ import {
 } from "@/mock/data";
 
 // ---- Auth Store ----
+export function normalizeStore(rawStore: any): Store | null {
+  if (!rawStore) return null;
+  return {
+    id: rawStore.id,
+    name: rawStore.name || "My Store",
+    description: rawStore.description || "",
+    logo: rawStore.logo || undefined,
+    banner: rawStore.banner || undefined,
+    email: rawStore.email || "",
+    phone: rawStore.phone || "",
+    address: {
+      line1: rawStore.addressLine1 || rawStore.address?.line1 || "",
+      line2: rawStore.addressLine2 || rawStore.address?.line2 || "",
+      city: rawStore.city || rawStore.address?.city || "Bangalore",
+      state: rawStore.state || rawStore.address?.state || "Karnataka",
+      pincode: rawStore.pincode || rawStore.address?.pincode || "",
+      landmark: rawStore.landmark || rawStore.address?.landmark || "",
+    },
+    operatingHours: rawStore.operatingHours || [
+      { day: "Monday", open: "07:00", close: "22:30", isOpen: true },
+      { day: "Tuesday", open: "07:00", close: "22:30", isOpen: true },
+      { day: "Wednesday", open: "07:00", close: "22:30", isOpen: true },
+      { day: "Thursday", open: "07:00", close: "22:30", isOpen: true },
+      { day: "Friday", open: "07:00", close: "22:30", isOpen: true },
+      { day: "Saturday", open: "07:00", close: "22:30", isOpen: true },
+      { day: "Sunday", open: "07:00", close: "22:30", isOpen: true },
+    ],
+    deliverySettings: {
+      deliveryEnabled: rawStore.deliveryEnabled ?? rawStore.deliverySettings?.deliveryEnabled ?? true,
+      pickupEnabled: rawStore.pickupEnabled ?? rawStore.deliverySettings?.pickupEnabled ?? true,
+      deliveryRadius: rawStore.deliveryRadiusKm ?? rawStore.deliverySettings?.deliveryRadius ?? 5,
+      minimumOrder: rawStore.minimumOrderValue ?? rawStore.deliverySettings?.minimumOrder ?? 199,
+      deliveryFee: rawStore.deliveryFee ?? rawStore.deliverySettings?.deliveryFee ?? 29,
+      freeDeliveryAbove: rawStore.freeDeliveryAbove ?? rawStore.deliverySettings?.freeDeliveryAbove ?? 499,
+    },
+    status: (rawStore.status === "offline" ? "offline" : rawStore.status === "suspended" ? "suspended" : "online"),
+    verified: rawStore.verificationStatus === "approved" || rawStore.verified === true,
+    createdAt: rawStore.createdAt ? String(rawStore.createdAt) : new Date().toISOString(),
+  };
+}
+
 interface AuthStore {
   isAuthenticated: boolean;
   seller: Seller | null;
   store: Store | null;
-  login: () => void;
+  login: (seller?: any, store?: any) => void;
   logout: () => void;
   updateStore: (data: Partial<Store>) => void;
   updateSeller: (data: Partial<Seller>) => void;
@@ -53,18 +94,22 @@ export const useAuthStore = create<AuthStore>()(
       isAuthenticated: false,
       seller: null,
       store: null,
-      login: () =>
-        set({
+      login: (seller, store) =>
+        set((state) => ({
           isAuthenticated: true,
-          seller: mockSeller,
-          store: mockStore,
-        }),
-      logout: () =>
+          seller: seller || state.seller,
+          store: store ? normalizeStore(store) : state.store,
+        })),
+      logout: () => {
+        try {
+          fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+        } catch {}
         set({
           isAuthenticated: false,
           seller: null,
           store: null,
-        }),
+        });
+      },
       updateStore: (data) =>
         set((state) => ({
           store: state.store ? { ...state.store, ...data } : null,

@@ -3,28 +3,33 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Mail, Phone, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { User, Mail, Phone, Lock, Eye, EyeOff, ArrowRight, Store, Loader2, Sparkles } from "lucide-react";
 import { FormField, toast } from "@/components/common";
+import { useAuthStore } from "@/lib/store";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { login } = useAuthStore();
 
   const [fullName, setFullName] = useState("");
+  const [storeName, setStoreName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim() || !email.trim() || !phone.trim() || !password.trim()) {
-      toast.error("Please fill in all required registration fields.");
+
+    if (!fullName.trim()) {
+      toast.error("Please enter proprietor full name.");
       return;
     }
-    if (!email.includes("@") || !email.includes(".")) {
-      toast.error("Please enter a valid email address.");
+    if (!email.trim() || !email.includes("@") || !email.includes(".")) {
+      toast.error("Please provide a valid business email address.");
       return;
     }
     if (phone.replace(/\D/g, "").length < 10) {
@@ -32,30 +37,70 @@ export default function RegisterPage() {
       return;
     }
     if (password.length < 6) {
-      toast.error("Password must be at least 6 characters.");
+      toast.error("Password must be at least 6 characters long.");
       return;
     }
     if (password !== confirmPassword) {
-      toast.error("Passwords do not match.");
+      toast.error("Passwords do not match. Please verify.");
       return;
     }
     if (!agreeTerms) {
-      toast.error("Please agree to the Merchant Terms of Service.");
+      toast.error("Please agree to the SUVORA Merchant Agreement.");
       return;
     }
 
-    toast.success("Verification OTP dispatched to your mobile number.");
-    router.push("/verify");
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          storeName: storeName.trim() || undefined,
+          email: email.trim().toLowerCase(),
+          phone: phone.trim(),
+          password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(
+          data.error || "Registration failed. Please check your details and try again.",
+          "Registration Failed"
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Update state with newly registered seller & store
+      login(data.seller, data.store);
+      toast.success(
+        data.message || `Welcome to SUVORA, ${data.seller.name}! Your store is ready.`,
+        "Registration Complete"
+      );
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error. Please try again.";
+      toast.error(msg, "Connection Error");
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="bg-white rounded-3xl p-8 sm:p-10 border border-purple-100 shadow-xl space-y-6">
+    <div className="bg-white rounded-3xl p-8 sm:p-10 border border-slate-200/80 shadow-xl space-y-6">
       <div className="space-y-1">
+        <div className="flex items-center gap-1.5 text-blue-600 font-bold text-xs uppercase tracking-wider mb-1">
+          <Sparkles className="w-4 h-4 text-blue-600" />
+          <span>Quick Onboarding</span>
+        </div>
         <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-          Register Seller Account
+          Create Seller Account
         </h1>
-        <p className="text-xs text-slate-400">
-          Join hundreds of local store owners powering neighbourhood commerce
+        <p className="text-xs text-slate-500">
+          Join SUVORA and take your local store online in under 2 minutes
         </p>
       </div>
 
@@ -68,67 +113,92 @@ export default function RegisterPage() {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="e.g. Ramesh Chandra"
-              className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+              disabled={isLoading}
+              className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 disabled:opacity-60"
             />
           </div>
         </FormField>
 
-        <FormField label="Email Address" required>
+        <FormField label="Store / Business Name">
           <div className="relative">
-            <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
+            <Store className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="ramesh@gmail.com"
-              className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+              type="text"
+              value={storeName}
+              onChange={(e) => setStoreName(e.target.value)}
+              placeholder={fullName ? `${fullName}'s Store` : "e.g. Ramesh Kirana & Daily Needs"}
+              disabled={isLoading}
+              className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 disabled:opacity-60"
             />
           </div>
         </FormField>
 
-        <FormField label="Mobile Phone Number" required>
-          <div className="relative">
-            <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+91 98765 00000"
-              className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-            />
-          </div>
-        </FormField>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <FormField label="Email Address" required>
+            <div className="relative">
+              <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="merchant@suvora.in"
+                disabled={isLoading}
+                className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 disabled:opacity-60"
+              />
+            </div>
+          </FormField>
 
-        <FormField label="Create Password" required>
-          <div className="relative">
-            <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
-            <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600"
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-        </FormField>
+          <FormField label="Mobile Phone Number" required>
+            <div className="relative">
+              <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="9876543210"
+                disabled={isLoading}
+                className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 disabled:opacity-60"
+              />
+            </div>
+          </FormField>
+        </div>
 
-        <FormField label="Confirm Password" required>
-          <div className="relative">
-            <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl"
-            />
-          </div>
-        </FormField>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <FormField label="Create Password" required>
+            <div className="relative">
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                disabled={isLoading}
+                className="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 disabled:opacity-60"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </FormField>
+
+          <FormField label="Confirm Password" required>
+            <div className="relative">
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter password"
+                disabled={isLoading}
+                className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl text-slate-900 disabled:opacity-60"
+              />
+            </div>
+          </FormField>
+        </div>
 
         <div className="pt-1">
           <label className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer">
@@ -136,7 +206,7 @@ export default function RegisterPage() {
               type="checkbox"
               checked={agreeTerms}
               onChange={(e) => setAgreeTerms(e.target.checked)}
-              className="w-4 h-4 accent-purple-600 rounded mt-0.5"
+              className="w-4 h-4 accent-blue-600 rounded mt-0.5"
             />
             <span>
               I agree to the SUVORA Merchant Agreement, Marketplace Policies, and Privacy Terms.
@@ -146,20 +216,29 @@ export default function RegisterPage() {
 
         <button
           type="submit"
-          className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2 mt-2"
+          disabled={isLoading}
+          className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-xs transition-all active:scale-[0.99] flex items-center justify-center gap-2 mt-2 disabled:opacity-70 cursor-pointer"
         >
-          <span>Continue to OTP Verification</span>
-          <ArrowRight className="w-4 h-4" />
+          {isLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Creating your merchant account...</span>
+            </>
+          ) : (
+            <>
+              <span>Complete Registration</span>
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
         </button>
       </form>
 
       <div className="pt-4 border-t border-slate-100 text-center text-xs text-slate-500">
         Already registered as a seller?{" "}
-        <Link href="/login" className="font-bold text-purple-600 hover:underline ml-1">
+        <Link href="/login" className="font-bold text-blue-600 hover:underline ml-1">
           Sign In
         </Link>
       </div>
     </div>
   );
 }
-

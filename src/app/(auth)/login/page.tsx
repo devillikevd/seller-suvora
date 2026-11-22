@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Lock, Mail, ArrowRight, ShieldCheck, KeyRound } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, ArrowRight, ShieldCheck, Loader2 } from "lucide-react";
 import { FormField, toast } from "@/components/common";
 import { useAuthStore } from "@/lib/store";
 
@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // 1. Mandatory Email/Phone validation
@@ -25,7 +25,7 @@ export default function LoginPage() {
       return;
     }
 
-    // 2. Mandatory Password validation (Cannot be empty!)
+    // 2. Mandatory Password validation
     if (!password || password.trim().length === 0) {
       toast.error("Password cannot be empty. Please enter your account password.", "Password Required");
       return;
@@ -37,25 +37,38 @@ export default function LoginPage() {
       return;
     }
 
-    // 4. Mock credentials verification (password123, admin123, suvora123)
-    if (password !== "password123" && password !== "admin123" && password !== "suvora123") {
-      toast.error("Incorrect password! For demo use: password123", "Authentication Failed");
-      return;
-    }
-
     setIsLoading(true);
-    setTimeout(() => {
-      login();
-      setIsLoading(false);
-      toast.success("Welcome back to SUVORA Seller Hub!", "Login Successful");
-      router.push("/dashboard");
-    }, 400);
-  };
 
-  const handleQuickFillDemo = () => {
-    setEmailOrPhone("rajesh@freshmart.in");
-    setPassword("password123");
-    toast.info("Demo credentials filled: rajesh@freshmart.in / password123");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          emailOrPhone: emailOrPhone.trim(),
+          password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(
+          data.error || "Authentication failed. Please verify your credentials.",
+          "Login Failed"
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Store in auth state & redirect
+      login(data.seller, data.store);
+      toast.success(data.message || "Welcome back to SUVORA!", "Login Successful");
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error. Please try again.";
+      toast.error(msg, "Connection Error");
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -81,8 +94,9 @@ export default function LoginPage() {
               type="text"
               value={emailOrPhone}
               onChange={(e) => setEmailOrPhone(e.target.value)}
-              placeholder="e.g. rajesh@freshmart.in or 9876543210"
-              className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 transition-all placeholder:text-slate-400"
+              placeholder="e.g. merchant@suvora.in or 9876543210"
+              disabled={isLoading}
+              className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 transition-all placeholder:text-slate-400 disabled:opacity-60"
             />
           </div>
         </FormField>
@@ -95,7 +109,8 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your account password"
-              className="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 transition-all placeholder:text-slate-400"
+              disabled={isLoading}
+              className="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 transition-all placeholder:text-slate-400 disabled:opacity-60"
             />
             <button
               type="button"
@@ -106,21 +121,6 @@ export default function LoginPage() {
             </button>
           </div>
         </FormField>
-
-        {/* Demo Credentials Helper Pill */}
-        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 text-slate-600">
-            <KeyRound className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span>Demo: <strong className="text-slate-800">password123</strong></span>
-          </div>
-          <button
-            type="button"
-            onClick={handleQuickFillDemo}
-            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
-          >
-            Auto-fill
-          </button>
-        </div>
 
         <div className="flex items-center justify-between text-xs pt-1">
           <label className="flex items-center gap-2 text-slate-600 cursor-pointer">
@@ -142,10 +142,19 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-xs transition-all active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-70"
+          className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-xs transition-all active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer"
         >
-          <span>{isLoading ? "Signing in..." : "Access Seller Dashboard"}</span>
-          <ArrowRight className="w-4 h-4" />
+          {isLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Verifying credentials...</span>
+            </>
+          ) : (
+            <>
+              <span>Access Seller Dashboard</span>
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
         </button>
       </form>
 
