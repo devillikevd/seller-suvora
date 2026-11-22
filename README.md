@@ -243,3 +243,4 @@ npm run lint
 
 Developed with pride for the **SUVORA Local Commerce Ecosystem**.
 All rights reserved © 2026 SUVORA Technologies.
+co

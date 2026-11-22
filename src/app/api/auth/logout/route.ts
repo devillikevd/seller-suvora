@@ -10,3 +10,4 @@ export async function POST() {
     return NextResponse.json({ error: errMessage }, { status: 500 });
   }
 }
+
