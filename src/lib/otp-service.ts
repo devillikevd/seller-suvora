@@ -89,18 +89,12 @@ export function clearPendingVerification(email: string) {
 }
 
 /**
- * Get pending verification info if exists (without exposing password)
+ * Get pending verification info if exists
  */
-export function getPendingVerification(email: string) {
+export function getPendingVerification(email: string): PendingRegistration | null {
   const cleanEmail = email.toLowerCase().trim();
   const record = otpStore.get(cleanEmail);
   if (!record || Date.now() > record.expiresAt) return null;
-  return {
-    email: record.email,
-    phone: record.phone,
-    fullName: record.fullName,
-    storeName: record.storeName,
-    otp: record.otp,
-    expiresAt: record.expiresAt,
-  };
+  return record;
 }
+

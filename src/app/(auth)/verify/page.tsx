@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ShieldCheck, RotateCw, ArrowRight, Loader2, Sparkles, KeyRound } from "lucide-react";
+import { ShieldCheck, RotateCw, ArrowRight, Loader2, MailCheck } from "lucide-react";
 import { toast } from "@/components/common";
 import { useAuthStore } from "@/lib/store";
 
@@ -16,7 +16,6 @@ export default function VerifyOtpPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [generatedOtp, setGeneratedOtp] = useState("");
 
   useEffect(() => {
     try {
@@ -25,7 +24,6 @@ export default function VerifyOtpPage() {
         const parsed = JSON.parse(stored);
         if (parsed.email) setEmail(parsed.email);
         if (parsed.phone) setPhone(parsed.phone);
-        if (parsed.otp) setGeneratedOtp(parsed.otp);
       }
     } catch {}
   }, []);
@@ -73,18 +71,11 @@ export default function VerifyOtpPage() {
     }
   };
 
-  const handleQuickFill = () => {
-    const code = generatedOtp || "123456";
-    const digits = code.split("").slice(0, 6);
-    setOtp(digits);
-    toast.info(`Filled verification OTP: ${code}`);
-  };
-
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     const entered = otp.join("");
     if (entered.length < 6) {
-      toast.error("Please enter the complete 6-digit verification code.");
+      toast.error("Please enter the complete 6-digit confirmation code.");
       return;
     }
 
@@ -119,7 +110,7 @@ export default function VerifyOtpPage() {
       login(data.seller, data.store);
 
       toast.success(
-        "Email and mobile phone verified! Welcome to SUVORA.",
+        "Email verified successfully! Welcome to SUVORA.",
         "Store Activated"
       );
       router.push("/dashboard");
@@ -131,8 +122,14 @@ export default function VerifyOtpPage() {
   };
 
   const handleResend = async () => {
+    if (!email) {
+      toast.error("Session expired. Please fill the registration form.");
+      router.push("/register");
+      return;
+    }
+
     setCountdown(30);
-    toast.info("A fresh verification code is being sent...");
+    toast.info("Sending a fresh verification code to your email...");
     try {
       const res = await fetch("/api/auth/send-otp", {
         method: "POST",
@@ -141,55 +138,36 @@ export default function VerifyOtpPage() {
           email,
           phone,
           fullName: "Merchant",
-          password: "placeholder-retained",
+          password: "re-send-placeholder",
         }),
       });
       const data = await res.json();
-      if (data.otp) {
-        setGeneratedOtp(data.otp);
-        toast.success(`New OTP dispatched! Code: ${data.otp}`);
+      if (res.ok) {
+        toast.success("Fresh code sent to your email! Please check your inbox.");
+      } else {
+        toast.error(data.error || "Failed to resend code.");
       }
     } catch {
-      toast.info("Please re-enter details if session expired.");
+      toast.error("Network error while resending code.");
     }
   };
 
   return (
     <div className="bg-white rounded-3xl p-8 sm:p-10 border border-slate-200/80 shadow-xl space-y-6 text-center">
       <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-xs border border-blue-100">
-        <ShieldCheck className="w-7 h-7" />
+        <MailCheck className="w-7 h-7" />
       </div>
 
       <div className="space-y-1">
         <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-          Verify Phone & Business Email
+          Verify Your Email Address
         </h1>
         <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-          Enter the 6-digit one-time password dispatched to{" "}
-          <strong className="text-slate-800">{email || "your registered email"}</strong> and{" "}
-          <strong className="text-slate-800">{phone || "mobile number"}</strong>
+          We have sent a 6-digit confirmation code to{" "}
+          <strong className="text-slate-800">{email || "your registered email"}</strong>.
+          Please check your inbox (and spam folder) and enter the code below.
         </p>
       </div>
-
-      {/* Helpful OTP Banner for immediate localhost testing */}
-      {generatedOtp && (
-        <div className="p-3 bg-blue-50/70 border border-blue-200/70 rounded-2xl flex items-center justify-between text-xs text-left max-w-xs mx-auto">
-          <div className="flex items-center gap-2 text-slate-700">
-            <KeyRound className="w-4 h-4 text-blue-600 shrink-0" />
-            <div>
-              <span className="text-[10px] text-slate-500 font-semibold block uppercase tracking-wider">Verification OTP</span>
-              <strong className="text-sm font-mono tracking-widest text-blue-900">{generatedOtp}</strong>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleQuickFill}
-            className="px-2.5 py-1 text-[11px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors cursor-pointer"
-          >
-            Fill Code
-          </button>
-        </div>
-      )}
 
       <form onSubmit={handleVerify} className="space-y-6">
         {/* 6 Digit Input Boxes */}
@@ -219,7 +197,7 @@ export default function VerifyOtpPage() {
           {isLoading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Verifying OTP code...</span>
+              <span>Verifying code...</span>
             </>
           ) : (
             <>
@@ -239,13 +217,13 @@ export default function VerifyOtpPage() {
             className="font-bold text-blue-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
           >
             <RotateCw className="w-3.5 h-3.5" />
-            <span>Resend OTP Code</span>
+            <span>Resend Code</span>
           </button>
         )}
       </div>
 
       <div className="pt-2 border-t border-slate-100 text-center text-xs text-slate-400">
-        Entered wrong details?{" "}
+        Entered wrong email?{" "}
         <Link href="/register" className="text-blue-600 font-bold hover:underline">
           Edit registration details
         </Link>

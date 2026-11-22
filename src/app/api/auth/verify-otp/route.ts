@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { signToken, setSessionCookie } from "@/lib/auth";
-import { verifyPendingOtp, clearPendingVerification } from "@/lib/otp-service";
+import { getPendingVerification, clearPendingVerification, verifyPendingOtp } from "@/lib/otp-service";
+import { supabase, hasSupabaseAnonKey } from "@/lib/supabase";
 
 export async function POST(request: Request) {
   try {
@@ -18,17 +19,43 @@ export async function POST(request: Request) {
     const cleanEmail = email.toLowerCase().trim();
     const cleanOtp = otp.toString().trim();
 
-    // 1. Verify OTP from pending registration store
-    const pending = verifyPendingOtp(cleanEmail, cleanOtp);
+    // 1. Verify token with Supabase Auth if Anon Key is present
+    if (hasSupabaseAnonKey()) {
+      const { error: supabaseError } = await supabase.auth.verifyOtp({
+        email: cleanEmail,
+        token: cleanOtp,
+        type: "email",
+      });
+
+      if (supabaseError) {
+        console.error("[SUPABASE VERIFY OTP ERROR]:", supabaseError);
+        return NextResponse.json(
+          { error: `Invalid code: ${supabaseError.message}. Please check your email inbox.` },
+          { status: 400 }
+        );
+      }
+    } else {
+      // Fallback verification if Anon Key is not yet set in .env
+      const localVerified = verifyPendingOtp(cleanEmail, cleanOtp);
+      if (!localVerified) {
+        return NextResponse.json(
+          { error: "Invalid or expired OTP code. Please enter the correct code from your email." },
+          { status: 400 }
+        );
+      }
+    }
+
+    // 2. Retrieve pending registration details
+    const pending = getPendingVerification(cleanEmail);
 
     if (!pending) {
       return NextResponse.json(
-        { error: "Invalid or expired OTP code. Please enter the correct code or request a new one." },
+        { error: "Registration session expired. Please fill the registration form again." },
         { status: 400 }
       );
     }
 
-    // 2. Generate store name & unique slug
+    // 3. Generate store name & unique slug
     const resolvedStoreName = (pending.storeName || `${pending.fullName.trim()}'s Store`).trim();
     const baseSlug = resolvedStoreName
       .toLowerCase()
@@ -37,7 +64,7 @@ export async function POST(request: Request) {
       .slice(0, 24);
     const uniqueSlug = `${baseSlug}-${Math.random().toString(36).slice(2, 7)}`;
 
-    // 3. Atomic transaction to create Seller and Store in Supabase PostgreSQL
+    // 4. Atomic transaction to create Seller and Store in Supabase PostgreSQL
     const result = await prisma.$transaction(async (tx) => {
       // Create Verified Seller
       const newSeller = await tx.seller.create({
@@ -109,10 +136,10 @@ export async function POST(request: Request) {
       return { seller: newSeller, store: newStore };
     });
 
-    // 4. Clear the OTP from pending store
+    // 5. Clear the OTP from pending store
     clearPendingVerification(cleanEmail);
 
-    // 5. Sign JWT Session Token
+    // 6. Sign JWT Session Token
     const token = await signToken({
       sellerId: result.seller.id,
       email: result.seller.email,
@@ -120,13 +147,13 @@ export async function POST(request: Request) {
       role: result.seller.role,
     });
 
-    // 6. Set secure HTTP-only cookie
+    // 7. Set secure HTTP-only cookie
     await setSessionCookie(token);
 
     return NextResponse.json(
       {
         success: true,
-        message: "Email and phone verified successfully! Welcome to SUVORA.",
+        message: "Email verified successfully! Welcome to SUVORA.",
         seller: {
           id: result.seller.id,
           name: result.seller.name,

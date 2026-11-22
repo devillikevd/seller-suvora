@@ -89,7 +89,6 @@ export default function RegisterPage() {
         JSON.stringify({
           email: data.email,
           phone: data.phone,
-          otp: data.otp,
         })
       );
 

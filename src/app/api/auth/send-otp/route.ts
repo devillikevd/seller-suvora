@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
 import { createPendingVerification } from "@/lib/otp-service";
+import { supabase, hasSupabaseAnonKey } from "@/lib/supabase";
 
 export async function POST(request: Request) {
   try {
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
     // 3. Hash password securely
     const passwordHash = await hashPassword(password);
 
-    // 4. Generate OTP and store pending registration
+    // 4. Store pending registration details locally in memory
     const { otp, expiresAt } = createPendingVerification({
       fullName,
       storeName,
@@ -71,12 +72,36 @@ export async function POST(request: Request) {
       passwordHash,
     });
 
+    // 5. Send real OTP to email via Supabase Auth
+    if (hasSupabaseAnonKey()) {
+      const { error: supabaseError } = await supabase.auth.signInWithOtp({
+        email: cleanEmail,
+        options: {
+          shouldCreateUser: true,
+        },
+      });
+
+      if (supabaseError) {
+        console.error("[SUPABASE EMAIL OTP ERROR]:", supabaseError);
+        return NextResponse.json(
+          {
+            error: `Supabase Email Delivery Error: ${supabaseError.message}`,
+          },
+          { status: 400 }
+        );
+      }
+    } else {
+      console.warn(
+        "⚠️ NEXT_PUBLIC_SUPABASE_ANON_KEY is not configured in .env yet. Please provide your Supabase anon public key to send live emails via Supabase."
+      );
+    }
+
+    // 6. Return response WITHOUT showing OTP on client
     return NextResponse.json({
       success: true,
-      message: `A 6-digit verification code has been dispatched to ${cleanEmail} and ${cleanPhone}.`,
+      message: `A 6-digit verification code has been dispatched to ${cleanEmail}. Please check your email inbox.`,
       email: cleanEmail,
       phone: cleanPhone,
-      otp, // Provided for effortless localhost testing
       expiresAt,
     });
   } catch (error: unknown) {
