@@ -89,6 +89,8 @@ export default function RegisterPage() {
         JSON.stringify({
           email: data.email,
           phone: data.phone,
+          fullName: fullName.trim(),
+          storeName: storeName.trim(),
         })
       );
 

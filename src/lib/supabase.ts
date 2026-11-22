@@ -17,3 +17,4 @@ export function hasSupabaseAnonKey(): boolean {
     supabaseAnonKey !== "dummy-anon-key-placeholder"
   );
 }
+

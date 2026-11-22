@@ -16,6 +16,8 @@ export default function VerifyOtpPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [storeName, setStoreName] = useState("");
 
   useEffect(() => {
     try {
@@ -24,6 +26,8 @@ export default function VerifyOtpPage() {
         const parsed = JSON.parse(stored);
         if (parsed.email) setEmail(parsed.email);
         if (parsed.phone) setPhone(parsed.phone);
+        if (parsed.fullName) setFullName(parsed.fullName);
+        if (parsed.storeName) setStoreName(parsed.storeName);
       }
     } catch {}
   }, []);
@@ -94,6 +98,9 @@ export default function VerifyOtpPage() {
         body: JSON.stringify({
           email,
           otp: entered,
+          fullName,
+          phone,
+          storeName,
         }),
       });
 
