@@ -162,11 +162,11 @@ export function Header() {
           <DropdownMenu.Trigger asChild>
             <button className="flex items-center gap-2 p-1 pl-1.5 rounded-xl hover:bg-slate-100 border border-slate-200 transition-colors focus:outline-none">
               <div className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                {seller ? getInitials(seller.name) : "RK"}
+                {seller ? getInitials(seller.name) : "SV"}
               </div>
               <div className="hidden lg:flex flex-col text-left">
                 <span className="text-xs font-bold text-slate-900 leading-tight">
-                  {seller?.name || "Rajesh Kumar"}
+                  {seller?.name || "Merchant Owner"}
                 </span>
                 <span className="text-[10px] text-slate-500 leading-none">
                   Merchant Owner
@@ -182,8 +182,8 @@ export function Header() {
               className="z-50 w-52 bg-white rounded-2xl p-1.5 shadow-xl border border-[#E8EAED] text-xs animate-in fade-in-0 zoom-in-95"
             >
               <div className="px-3 py-2 border-b border-[#EFF1F4]">
-                <p className="font-bold text-[#202124]">{seller?.name || "Rajesh Kumar"}</p>
-                <p className="text-[11px] text-[#737780] truncate">{seller?.email || "rajesh@freshmart.in"}</p>
+                <p className="font-bold text-[#202124]">{seller?.name || "Merchant Owner"}</p>
+                <p className="text-[11px] text-[#737780] truncate">{seller?.email || "merchant@suvora.in"}</p>
               </div>
               <div className="py-1">
                 <DropdownMenu.Item asChild>

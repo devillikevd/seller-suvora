@@ -277,7 +277,7 @@ export const useInventoryStore = create<InventoryStore>((set) => ({
         reason,
         notes,
         createdAt: new Date().toISOString(),
-        createdBy: "Rajesh Kumar",
+        createdBy: "Store Owner",
       };
 
       const updatedInventory = state.inventory.map((item) => {

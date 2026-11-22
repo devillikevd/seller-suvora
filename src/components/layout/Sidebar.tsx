@@ -119,11 +119,11 @@ export function Sidebar() {
             {!sidebarCollapsed && (
               <div className="min-w-0 flex-1">
                 <span className="font-bold text-xs text-slate-800 block truncate">
-                  {store?.name || "FreshMart Store"}
+                  {store?.name || "My Store"}
                 </span>
                 <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live in Koramangala
+                  Live Storefront
                 </span>
               </div>
             )}
@@ -217,15 +217,15 @@ export function Sidebar() {
             )}
           >
             <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
-              {getInitials(seller?.name || "Rajesh Kumar")}
+              {getInitials(seller?.name || "Seller")}
             </div>
             {!sidebarCollapsed && (
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-slate-900 truncate leading-tight">
-                  {seller?.name || "Rajesh Kumar"}
+                  {seller?.name || "Merchant Owner"}
                 </p>
                 <p className="text-[10px] text-slate-500 truncate mt-0.5">
-                  {store?.name || "FreshMart General Store"}
+                  {store?.name || "SUVORA Store"}
                 </p>
               </div>
             )}

@@ -21,6 +21,16 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Ensure fresh registration fields
+  React.useEffect(() => {
+    setFullName("");
+    setStoreName("");
+    setEmail("");
+    setPhone("");
+    setPassword("");
+    setConfirmPassword("");
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -104,12 +114,18 @@ export default function RegisterPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3.5">
+      <form onSubmit={handleSubmit} autoComplete="off" className="space-y-3.5">
+        {/* Hidden decoy fields to defeat browser autofill */}
+        <input type="text" name="decoy_username" tabIndex={-1} className="hidden" aria-hidden="true" autoComplete="off" />
+        <input type="password" name="decoy_password" tabIndex={-1} className="hidden" aria-hidden="true" autoComplete="off" />
+
         <FormField label="Proprietor / Full Name" required>
           <div className="relative">
             <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
             <input
               type="text"
+              name="reg_proprietor_name"
+              autoComplete="off"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="e.g. Ramesh Chandra"
@@ -139,6 +155,8 @@ export default function RegisterPage() {
               <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
               <input
                 type="email"
+                name="reg_business_email"
+                autoComplete="off"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="merchant@suvora.in"
@@ -153,6 +171,8 @@ export default function RegisterPage() {
               <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
               <input
                 type="tel"
+                name="reg_phone_number"
+                autoComplete="off"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="9876543210"
@@ -169,6 +189,8 @@ export default function RegisterPage() {
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
               <input
                 type={showPassword ? "text" : "password"}
+                name="reg_user_password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="At least 6 characters"
@@ -190,6 +212,8 @@ export default function RegisterPage() {
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
               <input
                 type="password"
+                name="reg_confirm_password"
+                autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Re-enter password"

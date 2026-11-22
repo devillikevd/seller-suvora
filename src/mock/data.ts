@@ -8,9 +8,9 @@ import type {
 // ---- Seller & Store ----
 export const mockSeller: Seller = {
   id: "seller-001",
-  name: "Rajesh Kumar",
-  email: "rajesh@freshmart.in",
-  phone: "+91 98765 43210",
+  name: "Merchant Owner",
+  email: "merchant@suvora.in",
+  phone: "+91 98765 00000",
   avatar: "",
   role: "owner",
   storeId: "store-001",
@@ -18,13 +18,13 @@ export const mockSeller: Seller = {
 
 export const mockStore: Store = {
   id: "store-001",
-  name: "FreshMart General Store",
-  description: "Your neighbourhood one-stop shop for fresh groceries, daily essentials, snacks and household items. Serving the community since 2018.",
+  name: "My SUVORA Store",
+  description: "Your neighbourhood one-stop shop for fresh groceries, daily essentials, snacks and household items.",
   logo: "",
   banner: "",
-  email: "store@freshmart.in",
-  phone: "+91 98765 43210",
-  address: { line1: "Shop No. 12, Sunrise Complex", line2: "MG Road, Koramangala", city: "Bangalore", state: "Karnataka", pincode: "560034", landmark: "Near SBI Bank" },
+  email: "merchant@suvora.in",
+  phone: "+91 98765 00000",
+  address: { line1: "Shop No. 12, Market Complex", line2: "Main Road", city: "Bangalore", state: "Karnataka", pincode: "560001", landmark: "City Center" },
   operatingHours: [
     { day: "Monday", open: "08:00", close: "21:00", isOpen: true },
     { day: "Tuesday", open: "08:00", close: "21:00", isOpen: true },
@@ -223,10 +223,10 @@ export const mockNotifications: Notification[] = [
 
 // ---- Staff ----
 export const mockStaff: StaffMember[] = [
-  { id: "staff-001", name: "Rajesh Kumar", email: "rajesh@freshmart.in", phone: "+91 98765 43210", role: "owner", status: "active", permissions: [{ module: "all", actions: ["view", "create", "edit", "delete"] }], invitedAt: "2024-01-15T10:00:00Z", joinedAt: "2024-01-15T10:00:00Z" },
-  { id: "staff-002", name: "Amit Sharma", email: "amit@freshmart.in", phone: "+91 98765 43211", role: "store_manager", status: "active", permissions: [{ module: "orders", actions: ["view", "create", "edit"] }, { module: "products", actions: ["view", "create", "edit"] }, { module: "inventory", actions: ["view", "edit"] }], invitedAt: "2024-03-10T10:00:00Z", joinedAt: "2024-03-10T12:00:00Z" },
-  { id: "staff-003", name: "Priya Menon", email: "priya.m@freshmart.in", phone: "+91 98765 43212", role: "inventory_manager", status: "active", permissions: [{ module: "inventory", actions: ["view", "create", "edit"] }, { module: "products", actions: ["view"] }], invitedAt: "2024-05-20T10:00:00Z", joinedAt: "2024-05-21T09:00:00Z" },
-  { id: "staff-004", name: "Suresh Rajan", email: "suresh@freshmart.in", phone: "+91 98765 43213", role: "order_manager", status: "inactive", permissions: [{ module: "orders", actions: ["view", "edit"] }], invitedAt: "2024-06-15T10:00:00Z", joinedAt: "2024-06-16T11:00:00Z" },
+  { id: "staff-001", name: "Store Admin", email: "admin@suvora.in", phone: "+91 98765 00001", role: "owner", status: "active", permissions: [{ module: "all", actions: ["view", "create", "edit", "delete"] }], invitedAt: "2024-01-15T10:00:00Z", joinedAt: "2024-01-15T10:00:00Z" },
+  { id: "staff-002", name: "Operations Lead", email: "ops@suvora.in", phone: "+91 98765 00002", role: "store_manager", status: "active", permissions: [{ module: "orders", actions: ["view", "create", "edit"] }, { module: "products", actions: ["view", "create", "edit"] }, { module: "inventory", actions: ["view", "edit"] }], invitedAt: "2024-03-10T10:00:00Z", joinedAt: "2024-03-10T12:00:00Z" },
+  { id: "staff-003", name: "Inventory Specialist", email: "inventory@suvora.in", phone: "+91 98765 00003", role: "inventory_manager", status: "active", permissions: [{ module: "inventory", actions: ["view", "create", "edit"] }, { module: "products", actions: ["view"] }], invitedAt: "2024-05-20T10:00:00Z", joinedAt: "2024-05-21T09:00:00Z" },
+  { id: "staff-004", name: "Dispatch Associate", email: "dispatch@suvora.in", phone: "+91 98765 00004", role: "order_manager", status: "inactive", permissions: [{ module: "orders", actions: ["view", "edit"] }], invitedAt: "2024-06-15T10:00:00Z", joinedAt: "2024-06-16T11:00:00Z" },
 ];
 
 // ---- Transactions (Deterministic) ----

@@ -16,6 +16,22 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Ensure fields start completely empty and purge any legacy mock demo session from localStorage
+  React.useEffect(() => {
+    setEmailOrPhone("");
+    setPassword("");
+
+    try {
+      const currentAuth = useAuthStore.getState();
+      if (
+        currentAuth.seller?.email === "rajesh@freshmart.in" ||
+        currentAuth.seller?.id === "seller-001"
+      ) {
+        currentAuth.logout();
+      }
+    } catch {}
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -86,12 +102,19 @@ export default function LoginPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
+        {/* Hidden decoy fields to defeat aggressive browser autofill for localhost */}
+        <input type="text" name="prevent_autofill_user" tabIndex={-1} className="hidden" aria-hidden="true" autoComplete="off" />
+        <input type="password" name="prevent_autofill_pwd" tabIndex={-1} className="hidden" aria-hidden="true" autoComplete="off" />
+
         <FormField label="Email or Mobile Number" required>
           <div className="relative">
             <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
             <input
               type="text"
+              name="suvora_merchant_identifier"
+              id="suvora_merchant_identifier"
+              autoComplete="off"
               value={emailOrPhone}
               onChange={(e) => setEmailOrPhone(e.target.value)}
               placeholder="e.g. merchant@suvora.in or 9876543210"
@@ -106,6 +129,9 @@ export default function LoginPage() {
             <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
             <input
               type={showPassword ? "text" : "password"}
+              name="suvora_merchant_secret"
+              id="suvora_merchant_secret"
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your account password"
