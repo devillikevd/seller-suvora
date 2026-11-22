@@ -21,18 +21,29 @@ export async function POST(request: Request) {
 
     // 1. Verify token with Supabase Auth if Anon Key is present
     if (hasSupabaseAnonKey()) {
-      const { error: supabaseError } = await supabase.auth.verifyOtp({
+      let { error: supabaseError } = await supabase.auth.verifyOtp({
         email: cleanEmail,
         token: cleanOtp,
         type: "email",
       });
 
+      // If "email" type didn't match (e.g. if Supabase categorized as signup OTP), retry with "signup"
       if (supabaseError) {
-        console.error("[SUPABASE VERIFY OTP ERROR]:", supabaseError);
-        return NextResponse.json(
-          { error: `Invalid code: ${supabaseError.message}. Please check your email inbox.` },
-          { status: 400 }
-        );
+        const signupRetry = await supabase.auth.verifyOtp({
+          email: cleanEmail,
+          token: cleanOtp,
+          type: "signup",
+        });
+
+        if (!signupRetry.error) {
+          supabaseError = null;
+        } else {
+          console.error("[SUPABASE VERIFY OTP ERROR]:", supabaseError, signupRetry.error);
+          return NextResponse.json(
+            { error: `Invalid code: ${supabaseError.message || signupRetry.error.message}. Please check the 6-digit code in your email.` },
+            { status: 400 }
+          );
+        }
       }
     } else {
       // Fallback verification if Anon Key is not yet set in .env
