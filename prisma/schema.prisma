@@ -1,0 +1,366 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -------------------------------------------------------------
+// 1. SELLER & STORE IDENTITY
+// -------------------------------------------------------------
+
+model Seller {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  phone        String   @unique
+  passwordHash String
+  avatar       String?
+  role         String   @default("owner") // owner, store_manager, inventory_manager, cashier
+  isVerified   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  stores Store[]
+
+  @@map("sellers")
+}
+
+model Store {
+  id                String   @id @default(uuid())
+  sellerId          String
+  name              String
+  slug              String   @unique
+  description       String?
+  email             String
+  phone             String
+  logo              String?
+  banner            String?
+  status            String   @default("online") // online, offline, busy
+  verificationStatus String  @default("approved") // pending, approved, rejected
+
+  // Address & Geofence
+  addressLine1      String
+  addressLine2      String?
+  city              String
+  state             String
+  pincode           String
+  landmark          String?
+  latitude          Float?
+  longitude         Float?
+
+  // Quick-Commerce Delivery Rules
+  deliveryEnabled   Boolean  @default(true)
+  pickupEnabled     Boolean  @default(true)
+  deliveryRadiusKm  Float    @default(5.0)
+  minimumOrderValue Float    @default(199.0)
+  deliveryFee       Float    @default(29.0)
+  freeDeliveryAbove Float    @default(499.0)
+
+  // Tax & KYC Compliance
+  gstNumber         String?
+  panNumber         String?
+  fssaiNumber       String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  seller            Seller            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  operatingHours    OperatingHour[]
+  categories        Category[]
+  products          Product[]
+  inventory         InventoryItem[]
+  orders            Order[]
+  offers            Offer[]
+  staff             StaffMember[]
+  transactions      Transaction[]
+  settlements       Settlement[]
+  notifications     Notification[]
+
+  @@map("stores")
+}
+
+model OperatingHour {
+  id        String  @id @default(uuid())
+  storeId   String
+  day       String  // Monday, Tuesday, ...
+  isOpen    Boolean @default(true)
+  openTime  String  @default("07:00")
+  closeTime String  @default("22:30")
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, day])
+  @@map("operating_hours")
+}
+
+// -------------------------------------------------------------
+// 2. CATALOG & INVENTORY
+// -------------------------------------------------------------
+
+model Category {
+  id          String    @id @default(uuid())
+  storeId     String
+  name        String
+  description String?
+  icon        String?
+  status      String    @default("active") // active, inactive
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([storeId, name])
+  @@map("categories")
+}
+
+model Product {
+  id                String   @id @default(uuid())
+  storeId           String
+  categoryId        String
+  name              String
+  shortDescription  String?
+  description       String?
+  sku               String
+  brand             String   @default("Generic")
+  images            String[]
+  price             Float
+  mrp               Float
+  discountPercent   Float    @default(0.0)
+  taxRatePercent    Float    @default(5.0) // 0, 5, 12, 18
+  stock             Int      @default(0)
+  lowStockThreshold Int      @default(10)
+  trackInventory    Boolean  @default(true)
+  status            String   @default("active") // active, draft, archived
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  store     Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category  Category         @relation(fields: [categoryId], references: [id])
+  variants  ProductVariant[]
+  inventory InventoryItem?
+  orderItems OrderItem[]
+
+  @@unique([storeId, sku])
+  @@map("products")
+}
+
+model ProductVariant {
+  id        String   @id @default(uuid())
+  productId String
+  name      String
+  sku       String
+  price     Float
+  mrp       Float
+  stock     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_variants")
+}
+
+model InventoryItem {
+  id                String   @id @default(uuid())
+  storeId           String
+  productId         String   @unique
+  sku               String
+  available         Int      @default(0)
+  reserved          Int      @default(0)
+  total             Int      @default(0)
+  lowStockThreshold Int      @default(10)
+  status            String   @default("in_stock") // in_stock, low_stock, out_of_stock
+  lastUpdated       DateTime @default(now())
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  adjustments StockAdjustment[]
+
+  @@map("inventory_items")
+}
+
+model StockAdjustment {
+  id              String   @id @default(uuid())
+  inventoryItemId String
+  type            String   // add, reduce, adjust
+  quantity        Int
+  reason          String
+  notes           String?
+  createdBy       String   @default("Store Staff")
+  createdAt       DateTime @default(now())
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@map("stock_adjustments")
+}
+
+// -------------------------------------------------------------
+// 3. CUSTOMERS & LIVE ORDER DISPATCH
+// -------------------------------------------------------------
+
+model Customer {
+  id          String   @id @default(uuid())
+  name        String
+  email       String?
+  phone       String   @unique
+  address     String?
+  totalOrders Int      @default(0)
+  totalSpent  Float    @default(0.0)
+  joinedAt    DateTime @default(now())
+
+  orders Order[]
+
+  @@map("customers")
+}
+
+model Order {
+  id                 String   @id @default(uuid())
+  storeId            String
+  customerId         String
+  orderNumber        String   @unique
+  status             String   @default("new") // new, accepted, preparing, ready, completed, cancelled
+  subtotal           Float
+  deliveryFee        Float    @default(0.0)
+  discount           Float    @default(0.0)
+  tax                Float    @default(0.0)
+  total              Float
+  paymentMethod      String   @default("upi") // upi, card, cod
+  paymentStatus      String   @default("paid") // paid, pending, refunded
+  cancellationReason String?
+  dispatchSlaMinutes Int      @default(15)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  store    Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer Customer        @relation(fields: [customerId], references: [id])
+  items    OrderItem[]
+  timeline OrderTimeline[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String @id @default(uuid())
+  orderId     String
+  productId   String
+  productName String
+  quantity    Int
+  price       Float
+  total       Float
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model OrderTimeline {
+  id        String   @id @default(uuid())
+  orderId   String
+  status    String
+  timestamp DateTime @default(now())
+  note      String?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_timelines")
+}
+
+// -------------------------------------------------------------
+// 4. OFFERS, STAFF, FINANCES & NOTIFICATIONS
+// -------------------------------------------------------------
+
+model Offer {
+  id            String   @id @default(uuid())
+  storeId       String
+  code          String
+  title         String
+  description   String?
+  discountType  String   // percentage, fixed
+  discountValue Float
+  minimumOrder  Float    @default(0.0)
+  maxUsage      Int      @default(100)
+  usedCount     Int      @default(0)
+  startDate     DateTime
+  endDate       DateTime
+  status        String   @default("active") // active, disabled, expired
+  createdAt     DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, code])
+  @@map("offers")
+}
+
+model StaffMember {
+  id          String   @id @default(uuid())
+  storeId     String
+  name        String
+  email       String
+  phone       String
+  role        String   @default("store_manager") // store_manager, inventory_manager, cashier
+  status      String   @default("active") // active, invited, suspended
+  permissions Json     @default("[]")
+  invitedAt   DateTime @default(now())
+  joinedAt    DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, email])
+  @@map("staff_members")
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  storeId     String
+  orderNumber String?
+  type        String   // sale, payout, refund, commission
+  amount      Float
+  fee         Float    @default(0.0)
+  net         Float
+  status      String   @default("completed") // completed, pending, failed
+  description String
+  date        DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@map("transactions")
+}
+
+model Settlement {
+  id          String   @id @default(uuid())
+  storeId     String
+  batchNumber String   @unique
+  period      String
+  grossAmount Float
+  commission  Float
+  deductions  Float    @default(0.0)
+  netAmount   Float
+  status      String   @default("settled") // settled, processing, pending
+  payoutDate  DateTime @default(now())
+  bankRef     String
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@map("settlements")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  storeId   String
+  title     String
+  message   String
+  type      String   // order, inventory, payment, platform
+  read      Boolean  @default(false)
+  actionUrl String?
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
