@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ChevronDown,
@@ -26,21 +26,78 @@ import type { OrderStatus } from "@/types";
 
 export default function DashboardPage() {
   const { store, seller, updateStore } = useAuthStore();
-  const { orders, updateOrderStatus } = useOrdersStore();
-  const { products } = useProductsStore();
+  const { orders, setOrders, updateOrderStatus } = useOrdersStore();
+  const { products, setProducts } = useProductsStore();
 
   const [dateRange, setDateRange] = useState<"all" | "today" | "week" | "month">("all");
   const [orderTab, setOrderTab] = useState<"all" | "new" | "preparing" | "ready" | "completed">("all");
 
+  // Sync latest orders and products from database on dashboard mount
+  useEffect(() => {
+    async function refreshDashboard() {
+      try {
+        const [ordersRes, productsRes] = await Promise.all([
+          fetch("/api/orders"),
+          fetch("/api/products"),
+        ]);
+        if (ordersRes.ok) {
+          const ordData = await ordersRes.json();
+          if (Array.isArray(ordData.orders)) setOrders(ordData.orders);
+        }
+        if (productsRes.ok) {
+          const prodData = await productsRes.json();
+          if (Array.isArray(prodData.products)) {
+            setProducts(
+              prodData.products.map((p: any) => ({
+                id: p.id,
+                name: p.name,
+                shortDescription: p.shortDescription || p.name,
+                description: p.description || p.name,
+                sku: p.sku,
+                category: p.category?.name || "Grocery",
+                categoryId: p.categoryId,
+                brand: p.brand || "Generic",
+                images: p.images || [],
+                price: Number(p.price),
+                mrp: Number(p.mrp),
+                discount: Number(p.discountPercent || 0),
+                taxRate: Number(p.taxRatePercent || 5),
+                variants: p.variants || [],
+                stock: Number(p.stock || 0),
+                lowStockThreshold: Number(p.lowStockThreshold || 10),
+                trackInventory: Boolean(p.trackInventory),
+                status: p.status || "active",
+                createdAt: p.createdAt,
+                updatedAt: p.updatedAt,
+              }))
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Dashboard refresh error:", err);
+      }
+    }
+    refreshDashboard();
+  }, [setOrders, setProducts]);
+
   const isStoreOnline = store?.status === "online";
 
-  const toggleStoreStatus = () => {
+  const toggleStoreStatus = async () => {
     const nextStatus = isStoreOnline ? "offline" : "online";
     updateStore({ status: nextStatus });
-    if (nextStatus === "online") {
-      toast.success("Store is now LIVE and accepting instant delivery orders.", "Store Online");
-    } else {
-      toast.warning("Store is paused. Customers cannot place new orders.", "Store Paused");
+    try {
+      await fetch("/api/store", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (nextStatus === "online") {
+        toast.success("Store is now LIVE and accepting instant delivery orders.", "Store Online");
+      } else {
+        toast.warning("Store is paused. Customers cannot place new orders.", "Store Paused");
+      }
+    } catch {
+      toast.error("Failed to update store status in database.");
     }
   };
 
@@ -76,7 +133,7 @@ export default function DashboardPage() {
   const topProducts = products.slice(0, 4);
 
   // Quick order status transition
-  const handleQuickStatusUpdate = (orderId: string, currentStatus: OrderStatus) => {
+  const handleQuickStatusUpdate = async (orderId: string, currentStatus: OrderStatus) => {
     let nextStatus: OrderStatus = "accepted";
     if (currentStatus === "new" || currentStatus === "accepted") {
       nextStatus = "preparing";
@@ -89,6 +146,15 @@ export default function DashboardPage() {
       toast.success(`Order #${orderId} handed over to SUVORA Express Rider.`, "Order Completed");
     }
     updateOrderStatus(orderId, nextStatus);
+    try {
+      await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+    } catch {
+      console.error("Could not persist status to backend");
+    }
   };
 
   const handleExport = () => {

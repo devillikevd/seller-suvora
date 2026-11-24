@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Store,
   MapPin,
@@ -13,6 +13,9 @@ import {
   Save,
   X,
   Info,
+  ShieldCheck,
+  FileText,
+  Loader2,
 } from "lucide-react";
 import { PageHeader, StatusBadge, toast } from "@/components/common";
 import { useAuthStore } from "@/lib/store";
@@ -21,6 +24,7 @@ import { formatCurrency } from "@/lib/utils";
 export default function StorePage() {
   const { store, updateStore } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -40,11 +44,64 @@ export default function StorePage() {
     minimumOrder: store?.deliverySettings.minimumOrder || 200,
     deliveryFee: store?.deliverySettings.deliveryFee || 30,
     freeDeliveryAbove: store?.deliverySettings.freeDeliveryAbove || 500,
+    gstNumber: "",
+    panNumber: "",
+    fssaiNumber: "",
   });
 
   const [operatingHours, setOperatingHours] = useState(
     store?.operatingHours || []
   );
+
+  // Load real store configuration from database on mount
+  useEffect(() => {
+    async function loadStore() {
+      try {
+        const res = await fetch("/api/store");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.store) {
+            const s = data.store;
+            setFormData({
+              name: s.name || "",
+              description: s.description || "",
+              email: s.email || "",
+              phone: s.phone || "",
+              line1: s.addressLine1 || "",
+              line2: s.addressLine2 || "",
+              city: s.city || "Bangalore",
+              state: s.state || "Karnataka",
+              pincode: s.pincode || "",
+              landmark: s.landmark || "",
+              deliveryEnabled: s.deliveryEnabled ?? true,
+              pickupEnabled: s.pickupEnabled ?? true,
+              deliveryRadius: s.deliveryRadiusKm ?? 5,
+              minimumOrder: s.minimumOrderValue ?? 199,
+              deliveryFee: s.deliveryFee ?? 29,
+              freeDeliveryAbove: s.freeDeliveryAbove ?? 499,
+              gstNumber: s.gstNumber || "",
+              panNumber: s.panNumber || "",
+              fssaiNumber: s.fssaiNumber || "",
+            });
+
+            if (s.operatingHours && s.operatingHours.length > 0) {
+              setOperatingHours(
+                s.operatingHours.map((oh: any) => ({
+                  day: oh.day,
+                  isOpen: oh.isOpen,
+                  open: oh.openTime,
+                  close: oh.closeTime,
+                }))
+              );
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch store:", err);
+      }
+    }
+    loadStore();
+  }, []);
 
   const handleToggleDay = (index: number) => {
     if (!isEditing) return;
@@ -64,7 +121,7 @@ export default function StorePage() {
     );
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name.trim()) {
       toast.error("Store name is required.");
       return;
@@ -74,32 +131,75 @@ export default function StorePage() {
       return;
     }
 
-    updateStore({
-      name: formData.name,
-      description: formData.description,
-      email: formData.email,
-      phone: formData.phone,
-      address: {
-        line1: formData.line1,
-        line2: formData.line2,
-        city: formData.city,
-        state: formData.state,
-        pincode: formData.pincode,
-        landmark: formData.landmark,
-      },
-      deliverySettings: {
-        deliveryEnabled: formData.deliveryEnabled,
-        pickupEnabled: formData.pickupEnabled,
-        deliveryRadius: Number(formData.deliveryRadius),
-        minimumOrder: Number(formData.minimumOrder),
-        deliveryFee: Number(formData.deliveryFee),
-        freeDeliveryAbove: Number(formData.freeDeliveryAbove),
-      },
-      operatingHours,
-    });
+    setIsSaving(true);
 
-    setIsEditing(false);
-    toast.success("Store configuration updated successfully!");
+    try {
+      const res = await fetch("/api/store", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          description: formData.description.trim(),
+          email: formData.email.toLowerCase().trim(),
+          phone: formData.phone.trim(),
+          addressLine1: formData.line1.trim(),
+          addressLine2: formData.line2.trim(),
+          city: formData.city.trim(),
+          state: formData.state.trim(),
+          pincode: formData.pincode.trim(),
+          landmark: formData.landmark.trim(),
+          deliveryEnabled: formData.deliveryEnabled,
+          pickupEnabled: formData.pickupEnabled,
+          deliveryRadiusKm: Number(formData.deliveryRadius),
+          minimumOrderValue: Number(formData.minimumOrder),
+          deliveryFee: Number(formData.deliveryFee),
+          freeDeliveryAbove: Number(formData.freeDeliveryAbove),
+          gstNumber: formData.gstNumber.trim().toUpperCase(),
+          panNumber: formData.panNumber.trim().toUpperCase(),
+          fssaiNumber: formData.fssaiNumber.trim(),
+          operatingHours,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "Failed to update store in database.");
+        setIsSaving(false);
+        return;
+      }
+
+      updateStore({
+        name: formData.name,
+        description: formData.description,
+        email: formData.email,
+        phone: formData.phone,
+        address: {
+          line1: formData.line1,
+          line2: formData.line2,
+          city: formData.city,
+          state: formData.state,
+          pincode: formData.pincode,
+          landmark: formData.landmark,
+        },
+        deliverySettings: {
+          deliveryEnabled: formData.deliveryEnabled,
+          pickupEnabled: formData.pickupEnabled,
+          deliveryRadius: Number(formData.deliveryRadius),
+          minimumOrder: Number(formData.minimumOrder),
+          deliveryFee: Number(formData.deliveryFee),
+          freeDeliveryAbove: Number(formData.freeDeliveryAbove),
+        },
+        operatingHours,
+      });
+
+      setIsEditing(false);
+      toast.success("Store configuration and hours saved to Supabase PostgreSQL database!", "Store Updated");
+    } catch {
+      toast.error("Network error while updating store.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -121,6 +221,9 @@ export default function StorePage() {
         minimumOrder: store.deliverySettings.minimumOrder,
         deliveryFee: store.deliverySettings.deliveryFee,
         freeDeliveryAbove: store.deliverySettings.freeDeliveryAbove,
+        gstNumber: store.gstNumber || "",
+        panNumber: store.panNumber || "",
+        fssaiNumber: store.fssaiNumber || "",
       });
       setOperatingHours(store.operatingHours);
     }
@@ -159,10 +262,20 @@ export default function StorePage() {
             </button>
             <button
               onClick={handleSave}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-md transition-all"
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-md transition-all disabled:opacity-60 cursor-pointer"
             >
-              <Save className="w-3.5 h-3.5" />
-              <span>Save Changes</span>
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving to DB...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save Changes</span>
+                </>
+              )}
             </button>
           </div>
         )}
@@ -529,6 +642,74 @@ export default function StorePage() {
                 ) : (
                   <p className="text-sm font-semibold text-slate-900 bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
                     Free on orders over {formatCurrency(formData.freeDeliveryAbove)}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Tax & Legal Compliance (GSTIN, PAN, FSSAI) */}
+          <div className="bg-white rounded-2xl p-6 border border-purple-100/70 shadow-sm space-y-4">
+            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+              <ShieldCheck className="w-4 h-4 text-purple-600" />
+              <h3 className="text-base font-bold text-slate-900">Tax & Regulatory Compliance</h3>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Required for automated GST customer invoicing and FSSAI food delivery license display on storefront.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">15-Digit GSTIN Number</label>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    placeholder="e.g. 29ABCDE1234F1Z5"
+                    value={formData.gstNumber}
+                    maxLength={15}
+                    onChange={(e) => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })}
+                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl uppercase font-mono"
+                  />
+                ) : (
+                  <p className="text-sm font-mono text-slate-800 bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
+                    {formData.gstNumber || "Not Provided (Unregistered Dealer)"}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">10-Digit PAN Number</label>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    placeholder="e.g. ABCDE1234F"
+                    value={formData.panNumber}
+                    maxLength={10}
+                    onChange={(e) => setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })}
+                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl uppercase font-mono"
+                  />
+                ) : (
+                  <p className="text-sm font-mono text-slate-800 bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
+                    {formData.panNumber || "Not Provided"}
+                  </p>
+                )}
+              </div>
+
+              <div className="sm:col-span-2 space-y-1">
+                <label className="text-xs font-bold text-slate-700">14-Digit FSSAI License Number (Food & Grocery)</label>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    placeholder="e.g. 11223344556677"
+                    value={formData.fssaiNumber}
+                    maxLength={14}
+                    onChange={(e) => setFormData({ ...formData, fssaiNumber: e.target.value })}
+                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl font-mono"
+                  />
+                ) : (
+                  <p className="text-sm font-mono text-slate-800 bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
+                    {formData.fssaiNumber || "Not Configured (Required for Grocery items)"}
                   </p>
                 )}
               </div>

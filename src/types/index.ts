@@ -16,6 +16,9 @@ export interface Store {
   deliverySettings: DeliverySettings;
   status: "online" | "offline" | "suspended";
   verified: boolean;
+  gstNumber?: string;
+  panNumber?: string;
+  fssaiNumber?: string;
   createdAt: string;
 }
 

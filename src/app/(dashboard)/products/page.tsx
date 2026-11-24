@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   Plus,
@@ -10,6 +10,7 @@ import {
   XCircle,
   MoreVertical,
   Trash2,
+  Loader2,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -23,9 +24,10 @@ import { useProductsStore, useCategoriesStore } from "@/lib/store";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default function ProductsPage() {
-  const { products, toggleStatus, deleteProduct, updateProduct } = useProductsStore();
-  const { categories } = useCategoriesStore();
+  const { products, setProducts, toggleStatus, deleteProduct, updateProduct } = useProductsStore();
+  const { categories, setCategories } = useCategoriesStore();
 
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
@@ -33,6 +35,75 @@ export default function ProductsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
+
+  // Fetch real products & categories from Database on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchCatalog() {
+      try {
+        setIsLoading(true);
+        const [prodRes, catRes] = await Promise.all([
+          fetch("/api/products"),
+          fetch("/api/categories"),
+        ]);
+
+        if (prodRes.ok) {
+          const prodData = await prodRes.json();
+          if (isMounted && prodData.products) {
+            setProducts(
+              prodData.products.map((p: any) => ({
+                id: p.id,
+                name: p.name,
+                shortDescription: p.shortDescription || p.name,
+                description: p.description || p.name,
+                sku: p.sku,
+                category: p.category?.name || "Grocery",
+                categoryId: p.categoryId,
+                brand: p.brand || "Generic",
+                images: p.images || [],
+                price: Number(p.price),
+                mrp: Number(p.mrp),
+                discount: Number(p.discountPercent || 0),
+                taxRate: Number(p.taxRatePercent || 5),
+                variants: p.variants || [],
+                stock: Number(p.stock || 0),
+                lowStockThreshold: Number(p.lowStockThreshold || 10),
+                trackInventory: Boolean(p.trackInventory),
+                status: p.status || "active",
+                createdAt: p.createdAt,
+                updatedAt: p.updatedAt,
+              }))
+            );
+          }
+        }
+
+        if (catRes.ok) {
+          const catData = await catRes.json();
+          if (isMounted && catData.categories) {
+            setCategories(
+              catData.categories.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                slug: c.name.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+                description: c.description || "",
+                productCount: c._count?.products || 0,
+                status: c.status || "active",
+              }))
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load products from database:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    fetchCatalog();
+    return () => {
+      isMounted = false;
+    };
+  }, [setProducts, setCategories]);
 
   // Filter products
   const filteredProducts = useMemo(() => {
@@ -77,29 +148,99 @@ export default function ProductsPage() {
     }
   };
 
-  const handleBulkActivate = () => {
-    selectedIds.forEach((id) => updateProduct(id, { status: "active" }));
-    toast.success(`Activated ${selectedIds.length} products`);
-    setSelectedIds([]);
+  const handleBulkActivate = async () => {
+    try {
+      await Promise.all(
+        selectedIds.map((id) =>
+          fetch(`/api/products/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "active" }),
+          })
+        )
+      );
+      selectedIds.forEach((id) => updateProduct(id, { status: "active" }));
+      toast.success(`Activated ${selectedIds.length} products in database`);
+      setSelectedIds([]);
+    } catch {
+      toast.error("Failed to activate some products.");
+    }
   };
 
-  const handleBulkDeactivate = () => {
-    selectedIds.forEach((id) => updateProduct(id, { status: "inactive" }));
-    toast.info(`Deactivated ${selectedIds.length} products`);
-    setSelectedIds([]);
+  const handleBulkDeactivate = async () => {
+    try {
+      await Promise.all(
+        selectedIds.map((id) =>
+          fetch(`/api/products/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "inactive" }),
+          })
+        )
+      );
+      selectedIds.forEach((id) => updateProduct(id, { status: "inactive" }));
+      toast.info(`Deactivated ${selectedIds.length} products`);
+      setSelectedIds([]);
+    } catch {
+      toast.error("Failed to deactivate some products.");
+    }
   };
 
-  const handleBulkArchive = () => {
-    selectedIds.forEach((id) => updateProduct(id, { status: "archived" }));
-    toast.warning(`Archived ${selectedIds.length} products`);
-    setSelectedIds([]);
+  const handleBulkArchive = async () => {
+    try {
+      await Promise.all(
+        selectedIds.map((id) =>
+          fetch(`/api/products/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "archived" }),
+          })
+        )
+      );
+      selectedIds.forEach((id) => updateProduct(id, { status: "archived" }));
+      toast.warning(`Archived ${selectedIds.length} products`);
+      setSelectedIds([]);
+    } catch {
+      toast.error("Failed to archive some products.");
+    }
   };
 
-  const handleDeleteConfirm = () => {
+  const handleToggleProductStatus = async (id: string, currentStatus: string) => {
+    const nextStatus = currentStatus === "active" ? "inactive" : "active";
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (res.ok) {
+        toggleStatus(id);
+        toast.success(`Product status updated to ${nextStatus.toUpperCase()}`);
+      } else {
+        toast.error("Could not update product status in database.");
+      }
+    } catch {
+      toast.error("Network error while updating product status.");
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
     if (deleteId) {
-      deleteProduct(deleteId);
-      toast.success("Product permanently deleted.");
-      setDeleteId(null);
+      try {
+        const res = await fetch(`/api/products/${deleteId}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          deleteProduct(deleteId);
+          toast.success("Product permanently deleted from database.");
+        } else {
+          toast.error("Failed to delete product from database.");
+        }
+      } catch {
+        toast.error("Network error while deleting product.");
+      } finally {
+        setDeleteId(null);
+      }
     }
   };
 
@@ -344,7 +485,7 @@ export default function ProductsPage() {
                               className="z-50 min-w-[150px] bg-white rounded-xl p-1.5 shadow-xl border border-slate-100 animate-in fade-in-0 zoom-in-95 focus:outline-none text-xs"
                             >
                               <DropdownMenu.Item
-                                onClick={() => toggleStatus(product.id)}
+                                onClick={() => handleToggleProductStatus(product.id, product.status)}
                                 className="flex items-center gap-2 px-2.5 py-1.5 text-slate-700 rounded-lg hover:bg-purple-50 hover:text-purple-700 cursor-pointer"
                               >
                                 {product.status === "active" ? (

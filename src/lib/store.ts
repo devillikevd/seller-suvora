@@ -58,6 +58,9 @@ export function normalizeStore(rawStore: any): Store | null {
     },
     status: (rawStore.status === "offline" ? "offline" : rawStore.status === "suspended" ? "suspended" : "online"),
     verified: rawStore.verificationStatus === "approved" || rawStore.verified === true,
+    gstNumber: rawStore.gstNumber || "",
+    panNumber: rawStore.panNumber || "",
+    fssaiNumber: rawStore.fssaiNumber || "",
     createdAt: rawStore.createdAt ? String(rawStore.createdAt) : new Date().toISOString(),
   };
 }
@@ -112,6 +115,7 @@ export const useAuthStore = create<AuthStore>()(
 // ---- Products Store ----
 interface ProductsStore {
   products: Product[];
+  setProducts: (products: Product[]) => void;
   addProduct: (product: Product) => void;
   updateProduct: (id: string, data: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
@@ -120,6 +124,7 @@ interface ProductsStore {
 
 export const useProductsStore = create<ProductsStore>((set) => ({
   products: [],
+  setProducts: (products) => set({ products }),
   addProduct: (product) =>
     set((state) => ({ products: [product, ...state.products] })),
   updateProduct: (id, data) =>
@@ -145,6 +150,7 @@ export const useProductsStore = create<ProductsStore>((set) => ({
 // ---- Categories Store ----
 interface CategoriesStore {
   categories: Category[];
+  setCategories: (categories: Category[]) => void;
   addCategory: (category: Category) => void;
   updateCategory: (id: string, data: Partial<Category>) => void;
   deleteCategory: (id: string) => void;
@@ -152,6 +158,7 @@ interface CategoriesStore {
 
 export const useCategoriesStore = create<CategoriesStore>((set) => ({
   categories: [],
+  setCategories: (categories) => set({ categories }),
   addCategory: (category) =>
     set((state) => ({ categories: [category, ...state.categories] })),
   updateCategory: (id, data) =>
@@ -169,12 +176,14 @@ export const useCategoriesStore = create<CategoriesStore>((set) => ({
 // ---- Orders Store ----
 interface OrdersStore {
   orders: Order[];
+  setOrders: (orders: Order[]) => void;
   updateOrderStatus: (id: string, status: OrderStatus) => void;
   getOrdersByStatus: (status: OrderStatus | "all") => Order[];
 }
 
 export const useOrdersStore = create<OrdersStore>((set, get) => ({
   orders: [],
+  setOrders: (orders) => set({ orders }),
   updateOrderStatus: (id, status) =>
     set((state) => ({
       orders: state.orders.map((o) =>
@@ -243,12 +252,14 @@ export const useOffersStore = create<OffersStore>((set) => ({
 // ---- Inventory Store ----
 interface InventoryStore {
   inventory: InventoryItem[];
+  setInventory: (items: InventoryItem[]) => void;
   stockHistory: StockAdjustment[];
   adjustStock: (productId: string, type: "add" | "reduce" | "adjust", quantity: number, reason: string, notes?: string) => void;
 }
 
 export const useInventoryStore = create<InventoryStore>((set) => ({
   inventory: [],
+  setInventory: (items) => set({ inventory: items }),
   stockHistory: [],
   adjustStock: (productId, type, quantity, reason, notes) =>
     set((state) => {

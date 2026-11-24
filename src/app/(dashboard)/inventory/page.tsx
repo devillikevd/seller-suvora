@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Warehouse,
   Plus,
@@ -10,6 +10,7 @@ import {
   History,
   TrendingDown,
   Package,
+  Loader2,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -24,8 +25,10 @@ import { formatDate } from "@/lib/utils";
 import type { InventoryItem } from "@/types";
 
 export default function InventoryPage() {
-  const { inventory, stockHistory, adjustStock } = useInventoryStore();
+  const { inventory, setInventory, stockHistory, adjustStock } = useInventoryStore();
 
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -36,6 +39,44 @@ export default function InventoryPage() {
   const [adjustmentReason, setAdjustmentReason] = useState("Supplier delivery");
   const [adjustmentNotes, setAdjustmentNotes] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Fetch real inventory from database on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchInventory() {
+      try {
+        setIsLoading(true);
+        const res = await fetch("/api/inventory");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data.inventory)) {
+            setInventory(
+              data.inventory.map((inv: any) => ({
+                id: inv.id,
+                productId: inv.productId,
+                productName: inv.product?.name || "Product",
+                sku: inv.sku || inv.product?.sku || "",
+                available: inv.available,
+                reserved: inv.reserved,
+                total: inv.total,
+                lowStockThreshold: inv.lowStockThreshold,
+                status: inv.status,
+                lastUpdated: inv.lastUpdated,
+              }))
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load inventory:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    fetchInventory();
+    return () => {
+      isMounted = false;
+    };
+  }, [setInventory]);
 
   // Stats calculation
   const totalStockUnits = useMemo(
@@ -80,7 +121,7 @@ export default function InventoryPage() {
     setIsModalOpen(true);
   };
 
-  const handleApplyAdjustment = (e: React.FormEvent) => {
+  const handleApplyAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
 
@@ -94,19 +135,46 @@ export default function InventoryPage() {
       return;
     }
 
-    adjustStock(
-      selectedItem.productId,
-      adjustmentType,
-      Number(adjustmentQuantity),
-      adjustmentReason,
-      adjustmentNotes
-    );
+    setIsSubmitting(true);
 
-    toast.success(
-      `Inventory updated for ${selectedItem.productName}.`,
-      "Stock Adjusted"
-    );
-    setIsModalOpen(false);
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: selectedItem.productId,
+          type: adjustmentType,
+          quantity: Number(adjustmentQuantity),
+          reason: adjustmentReason,
+          notes: adjustmentNotes,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to adjust stock in database.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      adjustStock(
+        selectedItem.productId,
+        adjustmentType,
+        Number(adjustmentQuantity),
+        adjustmentReason,
+        adjustmentNotes
+      );
+
+      toast.success(
+        `Inventory updated for ${selectedItem.productName} in database.`,
+        "Stock Adjusted"
+      );
+      setIsModalOpen(false);
+    } catch {
+      toast.error("Network error while adjusting stock.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

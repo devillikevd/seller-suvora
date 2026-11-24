@@ -1,26 +1,29 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { mockOrders } from "@/mock/data";
+import { getSession } from "@/lib/auth";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    let order = null;
-
-    try {
-      order = await prisma.order.findUnique({
-        where: { id },
-        include: { customer: true, items: true, timeline: true },
-      });
-    } catch {
-      order = mockOrders.find((o) => o.id === id) || null;
+    const session = await getSession();
+    if (!session || !session.sellerId) {
+      return NextResponse.json({ error: "Unauthorized. Please sign in." }, { status: 401 });
     }
+
+    const { id } = await params;
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { customer: true, items: true, timeline: true, store: true },
+    });
 
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    if (order.store.sellerId !== session.sellerId) {
+      return NextResponse.json({ error: "Forbidden. You do not own this store." }, { status: 403 });
     }
 
     return NextResponse.json({ success: true, order });
@@ -35,6 +38,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getSession();
+    if (!session || !session.sellerId) {
+      return NextResponse.json({ error: "Unauthorized. Please sign in." }, { status: 401 });
+    }
+
     const { id } = await params;
     const body = await request.json();
     const { status, note, cancellationReason } = body;
@@ -43,31 +51,33 @@ export async function PATCH(
       return NextResponse.json({ error: "Order status is required." }, { status: 400 });
     }
 
-    let updatedOrder = null;
+    const existing = await prisma.order.findUnique({
+      where: { id },
+      include: { store: true },
+    });
 
-    try {
-      updatedOrder = await prisma.order.update({
-        where: { id },
-        data: {
-          status,
-          ...(cancellationReason ? { cancellationReason } : {}),
-          timeline: {
-            create: {
-              status,
-              note: note || undefined,
-            },
+    if (!existing) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    if (existing.store.sellerId !== session.sellerId) {
+      return NextResponse.json({ error: "Forbidden. You do not own this store." }, { status: 403 });
+    }
+
+    const updatedOrder = await prisma.order.update({
+      where: { id },
+      data: {
+        status,
+        ...(cancellationReason ? { cancellationReason } : {}),
+        timeline: {
+          create: {
+            status,
+            note: note || `Order updated to ${status.toUpperCase()}`,
           },
         },
-        include: { customer: true, items: true, timeline: true },
-      });
-    } catch {
-      updatedOrder = {
-        id,
-        status,
-        cancellationReason,
-        updatedAt: new Date().toISOString(),
-      };
-    }
+      },
+      include: { customer: true, items: true, timeline: true },
+    });
 
     return NextResponse.json({
       success: true,
@@ -79,4 +89,3 @@ export async function PATCH(
     return NextResponse.json({ error: errMessage }, { status: 500 });
   }
 }
-

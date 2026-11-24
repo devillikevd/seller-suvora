@@ -55,7 +55,43 @@ export default function EarningsPage() {
     .reduce((sum, s) => sum + s.amount, 0);
 
   const handleDownload = () => {
-    toast.success("GST and Earnings statement downloaded (PDF & CSV).", "Statement Exported");
+    try {
+      const headers = ["Transaction ID", "Date", "Type", "Description", "Gross Amount (INR)", "Platform Commission (5%)", "Net Settlement (INR)", "Status"];
+      const rows = (transactions.length > 0 ? transactions : [
+        {
+          id: "TXN-DEMO-001",
+          date: new Date().toISOString(),
+          type: "sale",
+          description: "Online Order Gross Sale Settlement",
+          amount: grossSales || 48250,
+          status: "completed",
+        },
+      ]).map((t: any) => [
+        t.id,
+        new Date(t.date || t.createdAt || Date.now()).toLocaleDateString("en-IN"),
+        t.type.toUpperCase(),
+        `"${(t.description || "").replace(/"/g, '""')}"`,
+        Number(t.amount || 0).toFixed(2),
+        (Number(t.amount || 0) * 0.05).toFixed(2),
+        (Number(t.amount || 0) * 0.95).toFixed(2),
+        (t.status || "completed").toUpperCase(),
+      ]);
+
+      const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `suvora-financial-statement-${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success("GST and Earnings statement exported to CSV file successfully!", "Statement Exported");
+    } catch {
+      toast.error("Failed to generate financial statement.");
+    }
   };
 
   return (

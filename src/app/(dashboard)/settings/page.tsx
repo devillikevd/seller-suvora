@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,6 +13,7 @@ import {
   LogOut,
   Save,
   ChevronDown,
+  Loader2,
 } from "lucide-react";
 import {
   PageHeader,
@@ -29,15 +30,17 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("account");
 
   // Account State
-  const [name, setName] = useState(seller?.name || "Rajesh Kumar");
-  const [email, setEmail] = useState(seller?.email || "rajesh@freshmart.in");
-  const [phone, setPhone] = useState(seller?.phone || "+91 98765 43210");
+  const [name, setName] = useState(seller?.name || "");
+  const [email, setEmail] = useState(seller?.email || "");
+  const [phone, setPhone] = useState(seller?.phone || "");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Security State
   const [currPassword, setCurrPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Preference State
   const [language, setLanguage] = useState("en");
@@ -46,13 +49,65 @@ export default function SettingsPage() {
   // FAQ Accordion State
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  // Load real seller details on mount
+  useEffect(() => {
+    async function loadMe() {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.seller) {
+            setName(data.seller.name || "");
+            setEmail(data.seller.email || "");
+            setPhone(data.seller.phone || "");
+            updateSeller(data.seller);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch seller details:", err);
+      }
+    }
+    loadMe();
+  }, [updateSeller]);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateSeller({ name, email, phone });
-    toast.success("Merchant profile updated successfully.");
+    if (!name.trim()) {
+      toast.error("Merchant proprietor name is required.");
+      return;
+    }
+
+    setIsSavingProfile(true);
+
+    try {
+      const res = await fetch("/api/seller/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "Failed to update profile.");
+        setIsSavingProfile(false);
+        return;
+      }
+
+      updateSeller({ name, email, phone });
+      toast.success("Merchant profile updated in database successfully!");
+    } catch {
+      toast.error("Network error while updating profile.");
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
-  const handlePasswordChange = (e: React.FormEvent) => {
+  const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currPassword || !newPassword) {
       toast.error("Please enter current and new password.");
@@ -66,10 +121,36 @@ export default function SettingsPage() {
       toast.error("New passwords do not match.");
       return;
     }
-    toast.success("Security password changed.");
-    setCurrPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
+
+    setIsChangingPassword(true);
+
+    try {
+      const res = await fetch("/api/seller/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: currPassword,
+          newPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "Failed to change password.");
+        setIsChangingPassword(false);
+        return;
+      }
+
+      toast.success("Password changed successfully in database!");
+      setCurrPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch {
+      toast.error("Network error while updating password.");
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   const handleDeactivateConfirm = () => {
@@ -216,10 +297,20 @@ export default function SettingsPage() {
 
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1.5 px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+                  disabled={isSavingProfile}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-60 cursor-pointer"
                 >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Update Profile</span>
+                  {isSavingProfile ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Profile...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Update Profile</span>
+                    </>
+                  )}
                 </button>
               </form>
             </div>
@@ -263,9 +354,17 @@ export default function SettingsPage() {
 
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm"
+                  disabled={isChangingPassword}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm disabled:opacity-60 cursor-pointer"
                 >
-                  Change Password
+                  {isChangingPassword ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Updating Password...</span>
+                    </>
+                  ) : (
+                    <span>Change Password</span>
+                  )}
                 </button>
               </form>
 

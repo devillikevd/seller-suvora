@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   ShoppingBag,
@@ -8,6 +8,12 @@ import {
   Clock,
   Truck,
   IndianRupee,
+  Printer,
+  Volume2,
+  VolumeX,
+  Receipt,
+  X,
+  CheckCircle2,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -16,17 +22,107 @@ import {
   StatusBadge,
   toast,
 } from "@/components/common";
-import { useOrdersStore } from "@/lib/store";
-import { formatCurrency, getRelativeTime, getInitials } from "@/lib/utils";
-import type { OrderStatus } from "@/types";
+import { useOrdersStore, useAuthStore } from "@/lib/store";
+import { formatCurrency, getRelativeTime, getInitials, formatDate } from "@/lib/utils";
+import type { Order, OrderStatus } from "@/types";
+
+function playOrderChime() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const audioCtx = new AudioContextClass();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+    osc.start(audioCtx.currentTime);
+    osc.stop(audioCtx.currentTime + 0.45);
+  } catch {}
+}
 
 export default function OrdersPage() {
-  const { orders, updateOrderStatus } = useOrdersStore();
+  const { orders, setOrders, updateOrderStatus } = useOrdersStore();
+  const { store } = useAuthStore();
 
   const [activeTab, setActiveTab] = useState<OrderStatus | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [rejectOrderId, setRejectOrderId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("Item out of stock");
+  const [printOrder, setPrintOrder] = useState<Order | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const previousNewCountRef = useRef(0);
+
+  // Fetch real orders from database on mount & poll every 20s
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchOrders() {
+      try {
+        const res = await fetch("/api/orders");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data.orders)) {
+            const mappedOrders: Order[] = data.orders.map((o: any) => ({
+              id: o.id,
+              orderNumber: o.orderNumber,
+              customer: {
+                id: o.customer?.id || o.customerId,
+                name: o.customer?.name || "Shopper",
+                phone: o.customer?.phone || "+91 9000000000",
+                address: o.customer?.address || "Customer delivery address",
+                totalOrders: o.customer?.totalOrders || 1,
+              },
+              items: (o.items || []).map((it: any) => ({
+                id: it.id,
+                productId: it.productId,
+                productName: it.productName,
+                quantity: it.quantity,
+                price: it.price,
+                total: it.total,
+              })),
+              status: o.status as OrderStatus,
+              deliveryType: "delivery",
+              paymentMethod: o.paymentMethod || "upi",
+              paymentStatus: o.paymentStatus || "paid",
+              subtotal: o.subtotal,
+              deliveryFee: o.deliveryFee,
+              discount: o.discount || 0,
+              tax: o.tax,
+              total: o.total,
+              timeline: o.timeline || [],
+              createdAt: o.createdAt,
+              updatedAt: o.updatedAt,
+            }));
+
+            setOrders(mappedOrders);
+
+            // Check if new incoming orders arrived
+            const currentNewCount = mappedOrders.filter((ord) => ord.status === "new").length;
+            if (currentNewCount > previousNewCountRef.current) {
+              if (soundEnabled) {
+                playOrderChime();
+                toast.info(`🔔 New order arrived! (${currentNewCount} pending)`, "Incoming Order Alert");
+              }
+            }
+            previousNewCountRef.current = currentNewCount;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load orders from database:", err);
+      }
+    }
+
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 20000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [setOrders, soundEnabled]);
 
   // Summary counts
   const newOrdersCount = orders.filter((o) => o.status === "new").length;
@@ -52,16 +148,43 @@ export default function OrdersPage() {
     });
   }, [orders, activeTab, searchQuery]);
 
-  const handleStatusChange = (orderId: string, status: OrderStatus) => {
-    updateOrderStatus(orderId, status);
-    toast.success(`Order status updated to ${status.toUpperCase()}`);
+  const handleStatusChange = async (orderId: string, status: OrderStatus) => {
+    try {
+      const res = await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        updateOrderStatus(orderId, status);
+        toast.success(`Order status updated to ${status.toUpperCase()} in database!`);
+      } else {
+        toast.error("Failed to update order status in database.");
+      }
+    } catch {
+      toast.error("Network error while updating order status.");
+    }
   };
 
-  const handleRejectConfirm = () => {
+  const handleRejectConfirm = async () => {
     if (rejectOrderId) {
-      updateOrderStatus(rejectOrderId, "cancelled");
-      toast.warning(`Order rejected (${rejectReason})`);
-      setRejectOrderId(null);
+      try {
+        const res = await fetch(`/api/orders/${rejectOrderId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "cancelled", cancellationReason: rejectReason }),
+        });
+        if (res.ok) {
+          updateOrderStatus(rejectOrderId, "cancelled");
+          toast.warning(`Order rejected (${rejectReason})`);
+        } else {
+          toast.error("Failed to decline order.");
+        }
+      } catch {
+        toast.error("Network error while declining order.");
+      } finally {
+        setRejectOrderId(null);
+      }
     }
   };
 
@@ -80,7 +203,40 @@ export default function OrdersPage() {
       <PageHeader
         title="Orders Dispatch & Fulfillment"
         subtitle="Live local commerce order queue, status transitions and delivery rider handovers."
-      />
+      >
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const nextState = !soundEnabled;
+              setSoundEnabled(nextState);
+              if (nextState) {
+                playOrderChime();
+                toast.success("Order audio chime enabled!");
+              } else {
+                toast.info("Order audio chime muted.");
+              }
+            }}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+              soundEnabled
+                ? "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                : "bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200"
+            }`}
+            title="Toggle incoming order audio siren alert"
+          >
+            {soundEnabled ? (
+              <>
+                <Volume2 className="w-4 h-4 text-purple-600 animate-pulse" />
+                <span>Audio Alert: ON</span>
+              </>
+            ) : (
+              <>
+                <VolumeX className="w-4 h-4 text-slate-400" />
+                <span>Audio Alert: OFF</span>
+              </>
+            )}
+          </button>
+        </div>
+      </PageHeader>
 
       {/* Quick Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -311,9 +467,18 @@ export default function OrdersPage() {
                             </button>
                           )}
 
+                          <button
+                            type="button"
+                            onClick={() => setPrintOrder(order)}
+                            className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors ml-1"
+                            title="Print Thermal Bill / Packing KOT"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+
                           <Link
                             href={`/orders/${order.id}`}
-                            className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors ml-1"
+                            className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                             title="View Full Details"
                           >
                             <Eye className="w-4 h-4" />
@@ -380,6 +545,119 @@ export default function OrdersPage() {
                 </button>
               </div>
             </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Thermal Bill & KOT Packing Slip Print Modal */}
+      <Dialog.Root open={Boolean(printOrder)} onOpenChange={(open) => !open && setPrintOrder(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm animate-in fade-in-0 duration-200" />
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-sm translate-x-[-50%] translate-y-[-50%] rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 animate-in fade-in-0 zoom-in-95 duration-200 focus:outline-none">
+            {printOrder && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-dashed border-slate-300">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-purple-600" />
+                    <h3 className="text-sm font-bold text-slate-900">Thermal Packing Slip</h3>
+                  </div>
+                  <button
+                    onClick={() => setPrintOrder(null)}
+                    className="p-1 rounded-lg text-slate-400 hover:bg-slate-100"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Printable 80mm Slip Format */}
+                <div id="thermal-receipt" className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs space-y-3 text-slate-800">
+                  <div className="text-center space-y-0.5 border-b border-dashed border-slate-300 pb-2">
+                    <p className="font-extrabold text-sm uppercase">{store?.name || "SUVORA RETAIL STORE"}</p>
+                    <p className="text-[10px] text-slate-500">{store?.address?.line1 || "Store Address"}</p>
+                    <p className="text-[10px] text-slate-500">GSTIN: {store?.gstNumber || "29ABCDE1234F1Z5"} | FSSAI: {store?.fssaiNumber || "11223344556677"}</p>
+                  </div>
+
+                  <div className="text-[11px] space-y-0.5 border-b border-dashed border-slate-300 pb-2">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Order:</span>
+                      <span className="font-bold">{printOrder.orderNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Date:</span>
+                      <span>{new Date(printOrder.createdAt).toLocaleDateString("en-IN")} {new Date(printOrder.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Customer:</span>
+                      <span className="font-bold">{printOrder.customer.name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Phone:</span>
+                      <span>{printOrder.customer.phone}</span>
+                    </div>
+                  </div>
+
+                  {/* Items List */}
+                  <div className="space-y-1.5 border-b border-dashed border-slate-300 pb-2">
+                    <div className="flex justify-between font-bold text-[10px] text-slate-500">
+                      <span>ITEM</span>
+                      <span>QTY x PRICE</span>
+                      <span>TOTAL</span>
+                    </div>
+                    {printOrder.items.map((it, idx) => (
+                      <div key={idx} className="flex justify-between text-[11px]">
+                        <span className="truncate max-w-[120px]">{it.productName}</span>
+                        <span>{it.quantity} x {formatCurrency(it.price)}</span>
+                        <span className="font-bold">{formatCurrency(it.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Pricing Breakdown */}
+                  <div className="space-y-0.5 text-[11px] pt-1">
+                    <div className="flex justify-between text-slate-500">
+                      <span>Subtotal:</span>
+                      <span>{formatCurrency(printOrder.subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Delivery Fee:</span>
+                      <span>{formatCurrency(printOrder.deliveryFee)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>GST (5% Included):</span>
+                      <span>{formatCurrency(printOrder.tax)}</span>
+                    </div>
+                    <div className="flex justify-between font-black text-sm pt-1 border-t border-slate-300 text-slate-900">
+                      <span>TOTAL PAID:</span>
+                      <span>{formatCurrency(printOrder.total)}</span>
+                    </div>
+                  </div>
+
+                  <div className="text-center pt-2 text-[10px] text-slate-400">
+                    *** Thank you for shopping on SUVORA ***
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setPrintOrder(null)}
+                    className="px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.print();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print Receipt Slip</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>

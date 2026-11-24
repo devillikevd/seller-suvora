@@ -62,7 +62,9 @@ export async function POST(request: Request) {
     const resolvedFullName = (pending?.fullName || body.fullName || "Merchant Owner").trim();
     const resolvedPhone = (pending?.phone || body.phone || "+91 98765 00000").trim();
     const resolvedStoreName = (pending?.storeName || body.storeName || `${resolvedFullName}'s Store`).trim();
-    const resolvedPasswordHash = pending?.passwordHash || (await hashPassword("Seller@123456"));
+    const resolvedPasswordHash =
+      pending?.passwordHash ||
+      (body.password ? await hashPassword(body.password) : await hashPassword("Seller@123456"));
 
     // 3. Generate unique slug
     const baseSlug = resolvedStoreName

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -9,30 +9,32 @@ import {
   Plus,
   Trash2,
   Sparkles,
+  Loader2,
+  Camera,
 } from "lucide-react";
 import { FormField, toast } from "@/components/common";
 import { useProductsStore, useCategoriesStore } from "@/lib/store";
-import { generateId } from "@/lib/utils";
 import type { Product, ProductVariant } from "@/types";
 
 export default function AddProductPage() {
   const router = useRouter();
   const { addProduct } = useProductsStore();
-  const { categories } = useCategoriesStore();
+  const { categories, setCategories } = useCategoriesStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form State
   const [name, setName] = useState("");
   const [shortDesc, setShortDesc] = useState("");
   const [detailedDesc, setDetailedDesc] = useState("");
-  const [category, setCategory] = useState(categories[0]?.name || "Grocery");
+  const [category, setCategory] = useState("");
   const [brand, setBrand] = useState("");
-  const [sku, setSku] = useState("FM-7842");
+  const [sku, setSku] = useState(`FM-${Math.floor(1000 + Math.random() * 9000)}`);
 
   // Media
-  const [uploadedImages, setUploadedImages] = useState<string[]>([
-    "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&auto=format&fit=crop&q=60",
-  ]);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [primaryImageIdx, setPrimaryImageIdx] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Pricing
   const [price, setPrice] = useState<number>(350);
@@ -46,6 +48,34 @@ export default function AddProductPage() {
 
   // Variants
   const [variants, setVariants] = useState<ProductVariant[]>([]);
+
+  // Load real categories from DB if empty
+  useEffect(() => {
+    async function loadCategories() {
+      try {
+        const res = await fetch("/api/categories");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.categories?.length > 0) {
+            setCategories(
+              data.categories.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                slug: c.name.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+                description: c.description || "",
+                productCount: c._count?.products || 0,
+                status: c.status || "active",
+              }))
+            );
+            setCategory(data.categories[0].name);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load categories:", err);
+      }
+    }
+    loadCategories();
+  }, [setCategories]);
 
   // Calculated discount
   const discountPercent =
@@ -77,14 +107,44 @@ export default function AddProductPage() {
     );
   };
 
-  const handleAddImagePlaceholder = () => {
-    const placeholder =
-      "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop&q=60";
-    setUploadedImages([...uploadedImages, placeholder]);
-    toast.success("Sample product photograph added to media gallery.");
+  // Real Image Upload via /api/upload
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image file size exceeds maximum 5MB limit.");
+      return;
+    }
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to upload image.");
+        return;
+      }
+
+      setUploadedImages((prev) => [...prev, data.url]);
+      toast.success("Product image uploaded successfully!");
+    } catch {
+      toast.error("Network error while uploading product image.");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
-  const handleSubmit = (status: "active" | "draft") => {
+  const handleSubmit = async (status: "active" | "draft") => {
     if (!name.trim()) {
       toast.error("Product name is required.");
       return;
@@ -102,38 +162,76 @@ export default function AddProductPage() {
       return;
     }
 
-    const matchedCat = categories.find((c) => c.name === category);
+    setIsSubmitting(true);
 
-    const newProduct: Product = {
-      id: generateId("prod"),
-      name,
-      shortDescription: shortDesc || name,
-      description: detailedDesc || name,
-      sku,
-      category,
-      categoryId: matchedCat?.id || "cat-001",
-      brand: brand || "Generic",
-      images: uploadedImages,
-      price: Number(price),
-      mrp: Number(mrp),
-      discount: discountPercent,
-      taxRate: Number(taxRate),
-      variants,
-      stock: Number(initialStock),
-      lowStockThreshold: Number(lowStockThreshold),
-      trackInventory,
-      status,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          shortDescription: shortDesc.trim() || name.trim(),
+          description: detailedDesc.trim() || name.trim(),
+          sku: sku.trim().toUpperCase(),
+          category: category || "General Retail",
+          brand: brand.trim() || "Generic",
+          images: uploadedImages.length > 0 ? uploadedImages : ["/uploads/placeholder.png"],
+          price: Number(price),
+          mrp: Number(mrp),
+          discount: discountPercent,
+          taxRate: Number(taxRate),
+          variants,
+          stock: Number(initialStock),
+          lowStockThreshold: Number(lowStockThreshold),
+          status,
+        }),
+      });
 
-    addProduct(newProduct);
-    toast.success(
-      status === "active"
-        ? "Product published to store successfully!"
-        : "Product saved as draft."
-    );
-    router.push("/products");
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "Failed to save product to database.", "Submission Failed");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Add to client Zustand store
+      addProduct({
+        id: data.product.id,
+        name: data.product.name,
+        shortDescription: data.product.shortDescription || data.product.name,
+        description: data.product.description || data.product.name,
+        sku: data.product.sku,
+        category: data.product.category?.name || category || "Grocery",
+        categoryId: data.product.categoryId,
+        brand: data.product.brand || "Generic",
+        images: data.product.images || [],
+        price: Number(data.product.price),
+        mrp: Number(data.product.mrp),
+        discount: Number(data.product.discountPercent || 0),
+        taxRate: Number(data.product.taxRatePercent || 5),
+        variants: data.product.variants || [],
+        stock: Number(data.product.stock || 0),
+        lowStockThreshold: Number(data.product.lowStockThreshold || 10),
+        trackInventory: Boolean(data.product.trackInventory),
+        status: data.product.status || "active",
+        createdAt: data.product.createdAt,
+        updatedAt: data.product.updatedAt,
+      });
+
+      toast.success(
+        status === "active"
+          ? "Product published and saved to Supabase PostgreSQL database!"
+          : "Product saved as draft in database.",
+        "Product Created"
+      );
+
+      router.push("/products");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error. Please try again.";
+      toast.error(msg, "Error");
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -249,19 +347,32 @@ export default function AddProductPage() {
               <span className="text-xs text-slate-400">At least 1 photo recommended</span>
             </div>
 
+            {/* Hidden File Input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImageFileChange}
+              accept="image/*"
+              className="hidden"
+            />
+
             {/* Dropzone */}
             <div
-              onClick={handleAddImagePlaceholder}
+              onClick={() => fileInputRef.current?.click()}
               className="border-2 border-dashed border-purple-200 hover:border-purple-500 bg-purple-50/30 hover:bg-purple-50/70 rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-colors group"
             >
               <div className="w-12 h-12 rounded-full bg-white shadow-xs text-purple-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-                <Upload className="w-6 h-6" />
+                {isUploading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
+                ) : (
+                  <Upload className="w-6 h-6" />
+                )}
               </div>
               <p className="text-xs font-bold text-slate-800">
-                Click to browse or drop product images
+                {isUploading ? "Uploading image to server..." : "Click to select or upload product photo"}
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Supports JPG, PNG, WebP up to 5MB each
+                Take photo from phone camera or select JPG, PNG, WebP up to 5MB
               </p>
             </div>
 
@@ -537,18 +648,29 @@ export default function AddProductPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={() => handleSubmit("draft")}
-            className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-colors"
+            className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-colors disabled:opacity-60"
           >
-            Save as Draft
+            {isSubmitting ? "Saving..." : "Save as Draft"}
           </button>
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={() => handleSubmit("active")}
-            className="inline-flex items-center gap-2 px-6 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
+            className="inline-flex items-center gap-2 px-6 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-60 cursor-pointer"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Publish Product to Store</span>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Publishing to Database...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Publish Product to Store</span>
+              </>
+            )}
           </button>
         </div>
       </div>

@@ -18,6 +18,7 @@ export default function VerifyOtpPage() {
   const [phone, setPhone] = useState("");
   const [fullName, setFullName] = useState("");
   const [storeName, setStoreName] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     try {
@@ -28,6 +29,7 @@ export default function VerifyOtpPage() {
         if (parsed.phone) setPhone(parsed.phone);
         if (parsed.fullName) setFullName(parsed.fullName);
         if (parsed.storeName) setStoreName(parsed.storeName);
+        if (parsed.password) setPassword(parsed.password);
       }
     } catch {}
   }, []);
@@ -101,6 +103,7 @@ export default function VerifyOtpPage() {
           fullName,
           phone,
           storeName,
+          password,
         }),
       });
 

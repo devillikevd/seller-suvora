@@ -91,6 +91,7 @@ export default function RegisterPage() {
           phone: data.phone,
           fullName: fullName.trim(),
           storeName: storeName.trim(),
+          password,
         })
       );
 
