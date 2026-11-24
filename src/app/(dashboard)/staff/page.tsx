@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   UserPlus,
   Trash2,
   Check,
   X,
   Lock,
+  Loader2,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -21,8 +22,10 @@ import { formatDate, getInitials, generateId } from "@/lib/utils";
 import type { StaffMember, StaffRole } from "@/types";
 
 export default function StaffPage() {
-  const { staff, addStaff, removeStaff, toggleStatus } = useStaffStore();
+  const { staff, setStaff, addStaff, removeStaff, toggleStatus } = useStaffStore();
 
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [deleteStaffId, setDeleteStaffId] = useState<string | null>(null);
 
@@ -32,41 +35,116 @@ export default function StaffPage() {
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState<StaffRole>("store_manager");
 
-  const handleInviteSubmit = (e: React.FormEvent) => {
+  // Fetch real staff from database on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchStaff() {
+      try {
+        setIsLoading(true);
+        const res = await fetch("/api/staff");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data.staff)) {
+            setStaff(
+              data.staff.map((s: any) => ({
+                id: s.id,
+                name: s.name,
+                email: s.email,
+                phone: s.phone,
+                role: s.role as StaffRole,
+                status: s.status,
+                permissions: Array.isArray(s.permissions) ? s.permissions : [],
+                invitedAt: s.invitedAt,
+                joinedAt: s.joinedAt,
+              }))
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load staff:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    fetchStaff();
+    return () => {
+      isMounted = false;
+    };
+  }, [setStaff]);
+
+  const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !email.includes("@")) {
       toast.error("Valid name and email are required.");
       return;
     }
 
-    const newMember: StaffMember = {
-      id: generateId("staff"),
-      name,
-      email,
-      phone: phone || "+91 98765 00000",
-      role,
-      status: "active",
-      permissions: [
-        { module: "orders", actions: ["view", "edit"] },
-        { module: "inventory", actions: ["view", "edit"] },
-      ],
-      invitedAt: new Date().toISOString(),
-      joinedAt: new Date().toISOString(),
-    };
+    setIsSubmitting(true);
 
-    addStaff(newMember);
-    toast.success(`Invitation sent to ${newMember.email}!`);
-    setIsInviteOpen(false);
-    setName("");
-    setEmail("");
-    setPhone("");
+    try {
+      const res = await fetch("/api/staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone.trim() || "+91 9000000000",
+          role,
+          permissions: [
+            { module: "orders", actions: ["view", "edit"] },
+            { module: "inventory", actions: ["view", "edit"] },
+          ],
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to add staff member.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      addStaff({
+        id: data.staffMember.id,
+        name: data.staffMember.name,
+        email: data.staffMember.email,
+        phone: data.staffMember.phone,
+        role: data.staffMember.role as StaffRole,
+        status: data.staffMember.status,
+        permissions: data.staffMember.permissions || [],
+        invitedAt: data.staffMember.invitedAt,
+        joinedAt: data.staffMember.joinedAt,
+      });
+
+      toast.success(`Staff member ${data.staffMember.name} added to store team!`);
+      setIsInviteOpen(false);
+      setName("");
+      setEmail("");
+      setPhone("");
+    } catch {
+      toast.error("Network error while adding staff member.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleRemove = () => {
+  const handleRemove = async () => {
     if (deleteStaffId) {
-      removeStaff(deleteStaffId);
-      toast.success("Staff access revoked.");
-      setDeleteStaffId(null);
+      try {
+        const res = await fetch(`/api/staff/${deleteStaffId}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          removeStaff(deleteStaffId);
+          toast.success("Staff access revoked permanently from database.");
+        } else {
+          toast.error("Failed to remove staff member.");
+        }
+      } catch {
+        toast.error("Network error while removing staff.");
+      } finally {
+        setDeleteStaffId(null);
+      }
     }
   };
 

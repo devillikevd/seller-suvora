@@ -1,20 +1,47 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   Users,
   Eye,
   IndianRupee,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { PageHeader, SearchBar } from "@/components/common";
 import { useCustomersStore } from "@/lib/store";
 import { formatCurrency, formatDate, getInitials } from "@/lib/utils";
 
 export default function CustomersPage() {
-  const { customers } = useCustomersStore();
+  const { customers, setCustomers } = useCustomersStore();
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch real customers from database on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchCustomers() {
+      try {
+        setIsLoading(true);
+        const res = await fetch("/api/customers");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data.customers)) {
+            setCustomers(data.customers);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load customers:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    fetchCustomers();
+    return () => {
+      isMounted = false;
+    };
+  }, [setCustomers]);
 
   const totalSpentAll = customers.reduce((sum, c) => sum + c.totalSpent, 0);
   const avgLifetimeSpend = customers.length > 0 ? Math.round(totalSpentAll / customers.length) : 0;

@@ -210,15 +210,18 @@ export const useOrdersStore = create<OrdersStore>((set, get) => ({
 // ---- Customers Store ----
 interface CustomersStore {
   customers: Customer[];
+  setCustomers: (customers: Customer[]) => void;
 }
 
-export const useCustomersStore = create<CustomersStore>(() => ({
+export const useCustomersStore = create<CustomersStore>((set) => ({
   customers: [],
+  setCustomers: (customers) => set({ customers }),
 }));
 
 // ---- Offers Store ----
 interface OffersStore {
   offers: Offer[];
+  setOffers: (offers: Offer[]) => void;
   addOffer: (offer: Offer) => void;
   updateOffer: (id: string, data: Partial<Offer>) => void;
   deleteOffer: (id: string) => void;
@@ -227,6 +230,7 @@ interface OffersStore {
 
 export const useOffersStore = create<OffersStore>((set) => ({
   offers: [],
+  setOffers: (offers) => set({ offers }),
   addOffer: (offer) =>
     set((state) => ({ offers: [offer, ...state.offers] })),
   updateOffer: (id, data) =>
@@ -300,6 +304,7 @@ export const useInventoryStore = create<InventoryStore>((set) => ({
 // ---- Notifications Store ----
 interface NotificationsStore {
   notifications: Notification[];
+  setNotifications: (notifications: Notification[]) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   unreadCount: () => number;
@@ -307,6 +312,7 @@ interface NotificationsStore {
 
 export const useNotificationsStore = create<NotificationsStore>((set, get) => ({
   notifications: [],
+  setNotifications: (notifications) => set({ notifications }),
   markAsRead: (id) =>
     set((state) => ({
       notifications: state.notifications.map((n) =>
@@ -323,6 +329,7 @@ export const useNotificationsStore = create<NotificationsStore>((set, get) => ({
 // ---- Staff Store ----
 interface StaffStore {
   staff: StaffMember[];
+  setStaff: (staff: StaffMember[]) => void;
   addStaff: (member: StaffMember) => void;
   updateStaff: (id: string, data: Partial<StaffMember>) => void;
   removeStaff: (id: string) => void;
@@ -331,6 +338,7 @@ interface StaffStore {
 
 export const useStaffStore = create<StaffStore>((set) => ({
   staff: [],
+  setStaff: (staff) => set({ staff }),
   addStaff: (member) =>
     set((state) => ({ staff: [member, ...state.staff] })),
   updateStaff: (id, data) =>

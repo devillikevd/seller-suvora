@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useState, Suspense } from "react";
+import React, { use, useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -20,10 +20,66 @@ import type { OrderStatus } from "@/types";
 function OrderDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { orders, updateOrderStatus } = useOrdersStore();
+  const [fetchedOrder, setFetchedOrder] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [isDeclineOpen, setIsDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("One or more items out of stock");
 
-  const order = orders.find((o) => o.id === id);
+  const order = orders.find((o) => o.id === id) || fetchedOrder;
+
+  // Fallback direct DB fetch if order is not in client memory yet
+  useEffect(() => {
+    if (!orders.find((o) => o.id === id)) {
+      setIsLoading(true);
+      fetch(`/api/orders/${id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.order) {
+            setFetchedOrder({
+              id: data.order.id,
+              orderNumber: data.order.orderNumber,
+              customer: {
+                id: data.order.customer?.id,
+                name: data.order.customer?.name || "Shopper",
+                phone: data.order.customer?.phone || "+91 9000000000",
+                address: data.order.customer?.address || "Delivery address",
+                totalOrders: data.order.customer?.totalOrders || 1,
+              },
+              items: (data.order.items || []).map((it: any) => ({
+                id: it.id,
+                productId: it.productId,
+                productName: it.productName,
+                quantity: it.quantity,
+                price: it.price,
+                total: it.total,
+              })),
+              status: data.order.status as OrderStatus,
+              deliveryType: "delivery",
+              paymentMethod: data.order.paymentMethod || "upi",
+              paymentStatus: data.order.paymentStatus || "paid",
+              subtotal: data.order.subtotal,
+              deliveryFee: data.order.deliveryFee,
+              discount: data.order.discount || 0,
+              tax: data.order.tax,
+              total: data.order.total,
+              timeline: data.order.timeline || [],
+              createdAt: data.order.createdAt,
+              updatedAt: data.order.updatedAt,
+            });
+          }
+        })
+        .catch(console.error)
+        .finally(() => setIsLoading(false));
+    }
+  }, [id, orders]);
+
+  if (isLoading) {
+    return (
+      <div className="p-16 text-center text-slate-500 font-semibold text-xs">
+        Loading order details from database...
+      </div>
+    );
+  }
 
   if (!order) {
     return (
@@ -44,10 +100,10 @@ function OrderDetailContent({ params }: { params: Promise<{ id: string }> }) {
   }
 
   const handlePrint = () => {
-    toast.success(`Tax Invoice for ${order.orderNumber} sent to printer!`, "Invoice Downloaded");
+    window.print();
   };
 
-  const handleNextStatus = () => {
+  const handleNextStatus = async () => {
     const nextMap: Record<OrderStatus, OrderStatus | null> = {
       new: "accepted",
       accepted: "preparing",
@@ -57,10 +113,22 @@ function OrderDetailContent({ params }: { params: Promise<{ id: string }> }) {
       cancelled: null,
     };
 
-    const next = nextMap[order.status];
+    const next = nextMap[order.status as OrderStatus];
     if (next) {
       updateOrderStatus(order.id, next);
-      toast.success(`Order moved to ${next.toUpperCase()}`);
+      if (fetchedOrder) {
+        setFetchedOrder({ ...fetchedOrder, status: next });
+      }
+      toast.success(`Order moved to ${next.toUpperCase()} in database!`);
+      try {
+        await fetch(`/api/orders/${order.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: next }),
+        });
+      } catch {
+        console.error("Failed to update status in database");
+      }
     }
   };
 
@@ -147,7 +215,7 @@ function OrderDetailContent({ params }: { params: Promise<{ id: string }> }) {
             </h3>
 
             <div className="divide-y divide-slate-100">
-              {order.items.map((item) => (
+              {order.items.map((item: any) => (
                 <div key={item.id} className="py-3.5 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-xs shrink-0">
@@ -283,7 +351,7 @@ function OrderDetailContent({ params }: { params: Promise<{ id: string }> }) {
             </h3>
 
             <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-purple-100">
-              {order.timeline.map((step, idx) => (
+              {order.timeline.map((step: any, idx: number) => (
                 <div key={idx} className="relative">
                   <div className="absolute -left-6 top-1 w-3.5 h-3.5 rounded-full bg-purple-600 ring-4 ring-purple-100" />
                   <p className="text-xs font-bold text-slate-900 capitalize">
@@ -336,12 +404,22 @@ function OrderDetailContent({ params }: { params: Promise<{ id: string }> }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     updateOrderStatus(order.id, "cancelled");
+                    if (fetchedOrder) setFetchedOrder({ ...fetchedOrder, status: "cancelled" });
                     toast.warning(`Order declined (${declineReason})`);
                     setIsDeclineOpen(false);
+                    try {
+                      await fetch(`/api/orders/${order.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ status: "cancelled", cancellationReason: declineReason }),
+                      });
+                    } catch {
+                      console.error("Failed to cancel order in database");
+                    }
                   }}
-                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm"
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer"
                 >
                   Confirm Decline
                 </button>

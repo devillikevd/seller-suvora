@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Bell,
@@ -10,6 +10,7 @@ import {
   CreditCard,
   Megaphone,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 import { PageHeader, toast } from "@/components/common";
 import { useNotificationsStore } from "@/lib/store";
@@ -17,8 +18,44 @@ import { getRelativeTime } from "@/lib/utils";
 import type { NotificationType } from "@/types";
 
 export default function NotificationsPage() {
-  const { notifications, markAsRead, markAllAsRead, unreadCount } = useNotificationsStore();
+  const { notifications, setNotifications, markAsRead, markAllAsRead, unreadCount } = useNotificationsStore();
   const [activeTab, setActiveTab] = useState<NotificationType | "all">("all");
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch real notifications from database on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchNotifs() {
+      try {
+        setIsLoading(true);
+        const res = await fetch("/api/notifications");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data.notifications)) {
+            setNotifications(
+              data.notifications.map((n: any) => ({
+                id: n.id,
+                title: n.title,
+                message: n.message,
+                type: n.type as NotificationType,
+                read: n.read,
+                timestamp: n.createdAt,
+                actionUrl: n.actionUrl,
+              }))
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load notifications:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    fetchNotifs();
+    return () => {
+      isMounted = false;
+    };
+  }, [setNotifications]);
 
   // Notification Preferences State
   const [prefs, setPrefs] = useState({
@@ -38,9 +75,18 @@ export default function NotificationsPage() {
 
   const unread = unreadCount();
 
-  const handleMarkAll = () => {
-    markAllAsRead();
-    toast.success("All store alerts marked as read.");
+  const handleMarkAll = async () => {
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markAll: true }),
+      });
+      markAllAsRead();
+      toast.success("All store alerts marked as read in database.");
+    } catch {
+      toast.error("Failed to mark alerts as read.");
+    }
   };
 
   const handleTogglePref = (key: keyof typeof prefs) => {

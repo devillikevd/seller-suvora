@@ -27,22 +27,32 @@ export async function POST(request: Request) {
         type: "email",
       });
 
-      // If "email" type didn't match (e.g. if Supabase categorized as signup OTP), retry with "signup"
+      // If "email" type didn't match (e.g. if Supabase categorized as magiclink or signup OTP), retry with magiclink then signup
       if (supabaseError) {
-        const signupRetry = await supabase.auth.verifyOtp({
+        const magicRetry = await supabase.auth.verifyOtp({
           email: cleanEmail,
           token: cleanOtp,
-          type: "signup",
+          type: "magiclink",
         });
 
-        if (!signupRetry.error) {
+        if (!magicRetry.error) {
           supabaseError = null;
         } else {
-          console.error("[SUPABASE VERIFY OTP ERROR]:", supabaseError, signupRetry.error);
-          return NextResponse.json(
-            { error: `Invalid code: ${supabaseError.message || signupRetry.error.message}. Please check the 6-digit code in your email.` },
-            { status: 400 }
-          );
+          const signupRetry = await supabase.auth.verifyOtp({
+            email: cleanEmail,
+            token: cleanOtp,
+            type: "signup",
+          });
+
+          if (!signupRetry.error) {
+            supabaseError = null;
+          } else {
+            console.error("[SUPABASE VERIFY OTP ERROR]:", supabaseError, magicRetry.error, signupRetry.error);
+            return NextResponse.json(
+              { error: `Invalid code: ${supabaseError.message || magicRetry.error.message || signupRetry.error.message}. Please check the 6-digit code in your email.` },
+              { status: 400 }
+            );
+          }
         }
       }
     } else {

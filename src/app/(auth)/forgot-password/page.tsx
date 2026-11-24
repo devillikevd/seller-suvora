@@ -2,21 +2,44 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Mail, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Mail, ArrowLeft, ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import { FormField, toast } from "@/components/common";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !email.includes("@")) {
       toast.error("Please enter a valid registered email address.");
       return;
     }
-    setIsSubmitted(true);
-    toast.success("Password recovery instructions dispatched.");
+
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to dispatch recovery email.");
+        setIsLoading(false);
+        return;
+      }
+
+      setIsSubmitted(true);
+      toast.success("Password recovery instructions dispatched to your verified email!");
+    } catch {
+      toast.error("Network error while dispatching recovery email.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -47,10 +70,20 @@ export default function ForgotPasswordPage() {
 
           <button
             type="submit"
-            className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2"
+            disabled={isLoading}
+            className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
           >
-            <span>Send Password Reset Link</span>
-            <ArrowRight className="w-4 h-4" />
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Dispatching Reset Link...</span>
+              </>
+            ) : (
+              <>
+                <span>Send Password Reset Link</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
       ) : (

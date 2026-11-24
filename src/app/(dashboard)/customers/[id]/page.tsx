@@ -14,10 +14,45 @@ import { formatCurrency, formatDate, getInitials } from "@/lib/utils";
 
 function CustomerDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { customers } = useCustomersStore();
-  const { orders } = useOrdersStore();
+  const { customers, setCustomers } = useCustomersStore();
+  const { orders, setOrders } = useOrdersStore();
+  const [loading, setLoading] = React.useState(customers.length === 0);
+
+  React.useEffect(() => {
+    async function loadData() {
+      try {
+        if (customers.length === 0) {
+          const res = await fetch("/api/customers");
+          if (res.ok) {
+            const data = await res.json();
+            if (data.customers) setCustomers(data.customers);
+          }
+        }
+        if (orders.length === 0) {
+          const resO = await fetch("/api/orders");
+          if (resO.ok) {
+            const dataO = await resO.json();
+            if (dataO.orders) setOrders(dataO.orders);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load customer details", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [customers.length, orders.length, setCustomers, setOrders]);
 
   const customer = customers.find((c) => c.id === id);
+
+  if (loading) {
+    return (
+      <div className="p-12 text-center text-slate-400 text-sm">
+        Loading customer profile from database...
+      </div>
+    );
+  }
 
   if (!customer) {
     return (

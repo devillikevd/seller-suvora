@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Tag,
   Plus,
@@ -23,8 +23,10 @@ import { formatCurrency, formatDate, generateId } from "@/lib/utils";
 import type { Offer, DiscountType } from "@/types";
 
 export default function OffersPage() {
-  const { offers, addOffer, toggleOffer, deleteOffer } = useOffersStore();
+  const { offers, setOffers, addOffer, toggleOffer, deleteOffer } = useOffersStore();
 
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteOfferId, setDeleteOfferId] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -40,6 +42,47 @@ export default function OffersPage() {
   const [startDate, setStartDate] = useState("2026-11-20");
   const [endDate, setEndDate] = useState("2027-03-31");
 
+  // Fetch real offers from database on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchOffers() {
+      try {
+        setIsLoading(true);
+        const res = await fetch("/api/offers");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data.offers)) {
+            setOffers(
+              data.offers.map((o: any) => ({
+                id: o.id,
+                title: o.title,
+                description: o.description || "",
+                code: o.code,
+                discountType: o.discountType as DiscountType,
+                discountValue: Number(o.discountValue),
+                minimumOrder: Number(o.minimumOrder || 0),
+                maxUsage: Number(o.maxUsage || 100),
+                usedCount: Number(o.usedCount || 0),
+                startDate: o.startDate,
+                endDate: o.endDate,
+                status: o.status,
+                createdAt: o.createdAt,
+              }))
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load offers:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    fetchOffers();
+    return () => {
+      isMounted = false;
+    };
+  }, [setOffers]);
+
   const handleCopyCode = (promoCode: string) => {
     navigator.clipboard.writeText(promoCode);
     setCopiedCode(promoCode);
@@ -47,7 +90,7 @@ export default function OffersPage() {
     setTimeout(() => setCopiedCode(null), 2500);
   };
 
-  const handleCreateOffer = (e: React.FormEvent) => {
+  const handleCreateOffer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !code.trim()) {
       toast.error("Please fill in coupon title and promo code.");
@@ -69,34 +112,93 @@ export default function OffersPage() {
       return;
     }
 
-    const newOffer: Offer = {
-      id: generateId("off"),
-      title,
-      description,
-      code: code.toUpperCase().trim(),
-      discountType,
-      discountValue: Number(discountValue),
-      minimumOrder: Number(minimumOrder),
-      maxUsage: Number(maxUsage),
-      usedCount: 0,
-      startDate: new Date(startDate).toISOString(),
-      endDate: new Date(endDate).toISOString(),
-      status: "active",
-      createdAt: new Date().toISOString(),
-    };
+    setIsSubmitting(true);
 
-    addOffer(newOffer);
-    toast.success(`Coupon "${newOffer.code}" published for store customers!`);
-    setIsModalOpen(false);
-    setTitle("");
-    setCode("");
+    try {
+      const res = await fetch("/api/offers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+          code: code.toUpperCase().trim(),
+          discountType,
+          discountValue: Number(discountValue),
+          minimumOrder: Number(minimumOrder),
+          maxUsage: Number(maxUsage),
+          startDate,
+          endDate,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "Failed to create offer.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      addOffer({
+        id: data.offer.id,
+        title: data.offer.title,
+        description: data.offer.description || "",
+        code: data.offer.code,
+        discountType: data.offer.discountType as DiscountType,
+        discountValue: Number(data.offer.discountValue),
+        minimumOrder: Number(data.offer.minimumOrder),
+        maxUsage: Number(data.offer.maxUsage),
+        usedCount: 0,
+        startDate: data.offer.startDate,
+        endDate: data.offer.endDate,
+        status: data.offer.status,
+        createdAt: data.offer.createdAt,
+      });
+
+      toast.success(`Coupon "${data.offer.code}" saved to database successfully!`, "Coupon Published");
+      setIsModalOpen(false);
+      setTitle("");
+      setCode("");
+      setDescription("");
+    } catch {
+      toast.error("Network error while creating offer.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDelete = () => {
+  const handleToggleOfferStatus = async (id: string, currentStatus: string) => {
+    const nextStatus = currentStatus === "active" ? "disabled" : "active";
+    try {
+      const res = await fetch(`/api/offers/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (res.ok) {
+        toggleOffer(id);
+        toast.success(`Offer marked as ${nextStatus.toUpperCase()}`);
+      }
+    } catch {
+      toast.error("Failed to toggle offer status.");
+    }
+  };
+
+  const handleDelete = async () => {
     if (deleteOfferId) {
-      deleteOffer(deleteOfferId);
-      toast.success("Offer deleted.");
-      setDeleteOfferId(null);
+      try {
+        const res = await fetch(`/api/offers/${deleteOfferId}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          deleteOffer(deleteOfferId);
+          toast.success("Offer deleted permanently from database.");
+        }
+      } catch {
+        toast.error("Failed to delete offer.");
+      } finally {
+        setDeleteOfferId(null);
+      }
     }
   };
 
@@ -246,7 +348,7 @@ export default function OffersPage() {
               {/* Actions Footer */}
               <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                 <button
-                  onClick={() => toggleOffer(offer.id)}
+                  onClick={() => handleToggleOfferStatus(offer.id, offer.status)}
                   className={`font-semibold transition-colors ${
                     offer.status === "active"
                       ? "text-amber-600 hover:text-amber-700"
