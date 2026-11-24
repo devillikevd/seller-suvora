@@ -19,7 +19,9 @@ export async function POST(request: Request) {
     const cleanEmail = email.toLowerCase().trim();
     const cleanOtp = otp.toString().trim();
 
-    // 1. Verify token with Supabase Auth if Anon Key is present
+    // 1. Verify token with Supabase Auth (supports 'email', 'magiclink', and 'signup' types)
+    let isVerified = false;
+
     if (hasSupabaseAnonKey()) {
       let { error: supabaseError } = await supabase.auth.verifyOtp({
         email: cleanEmail,
@@ -27,8 +29,9 @@ export async function POST(request: Request) {
         type: "email",
       });
 
-      // If "email" type didn't match (e.g. if Supabase categorized as magiclink or signup OTP), retry with magiclink then signup
-      if (supabaseError) {
+      if (!supabaseError) {
+        isVerified = true;
+      } else {
         const magicRetry = await supabase.auth.verifyOtp({
           email: cleanEmail,
           token: cleanOtp,
@@ -36,7 +39,7 @@ export async function POST(request: Request) {
         });
 
         if (!magicRetry.error) {
-          supabaseError = null;
+          isVerified = true;
         } else {
           const signupRetry = await supabase.auth.verifyOtp({
             email: cleanEmail,
@@ -45,25 +48,25 @@ export async function POST(request: Request) {
           });
 
           if (!signupRetry.error) {
-            supabaseError = null;
-          } else {
-            console.error("[SUPABASE VERIFY OTP ERROR]:", supabaseError, magicRetry.error, signupRetry.error);
-            return NextResponse.json(
-              { error: `Invalid code: ${supabaseError.message || magicRetry.error.message || signupRetry.error.message}. Please check the 6-digit code in your email.` },
-              { status: 400 }
-            );
+            isVerified = true;
           }
         }
       }
-    } else {
-      // Fallback verification if Anon Key is not yet set in .env
-      const localVerified = verifyPendingOtp(cleanEmail, cleanOtp);
-      if (!localVerified) {
-        return NextResponse.json(
-          { error: "Invalid or expired OTP code. Please enter the correct code from your email." },
-          { status: 400 }
-        );
+    }
+
+    // Also check local pending verification as dual fallback
+    if (!isVerified) {
+      const localRecord = verifyPendingOtp(cleanEmail, cleanOtp);
+      if (localRecord) {
+        isVerified = true;
       }
+    }
+
+    if (!isVerified) {
+      return NextResponse.json(
+        { error: "Invalid or expired OTP code. Please check the 6-digit code received in your email and enter it." },
+        { status: 400 }
+      );
     }
 
     // 2. Retrieve pending registration details (from memory or request fallback)
