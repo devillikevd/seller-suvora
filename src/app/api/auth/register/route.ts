@@ -5,7 +5,15 @@ import { hashPassword, signToken, setSessionCookie } from "@/lib/auth";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { fullName, email, phone, password, storeName } = body;
+    const { fullName, email, phone, password, storeName, otp } = body;
+
+    // Enforce OTP verification requirement
+    if (!otp) {
+      return NextResponse.json(
+        { error: "Email OTP verification is required. Please register via the OTP verification flow." },
+        { status: 400 }
+      );
+    }
 
     // 1. Validation
     if (!fullName || !email || !phone || !password) {

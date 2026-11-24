@@ -77,39 +77,44 @@ export default function AnalyticsPage() {
     loadData();
   }, [setOrders, setProducts]);
 
-  // Dynamic monthly sales trajectory computed from real orders
+  // Dynamic monthly sales trajectory computed from real store orders
   const monthlySalesData = useMemo(() => {
-    const months = ["Jun", "Jul", "Aug", "Sep", "Oct", "Nov"];
-    const currentMonthRev = orders
-      .filter((o) => o.status === "completed")
-      .reduce((sum, o) => sum + o.total, 0);
-    const currentMonthOrders = orders.length;
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const now = new Date();
+    const result = [];
 
-    return [
-      { name: "Jun", revenue: 24000, orders: 48 },
-      { name: "Jul", revenue: 31000, orders: 62 },
-      { name: "Aug", revenue: 38500, orders: 74 },
-      { name: "Sep", revenue: 42000, orders: 85 },
-      { name: "Oct", revenue: 45000, orders: 92 },
-      { name: "Nov", revenue: Math.max(currentMonthRev, 48250), orders: Math.max(currentMonthOrders, 105) },
-    ];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mName = months[d.getMonth()];
+      const y = d.getFullYear();
+      const m = d.getMonth();
+
+      const mOrders = orders.filter((o) => {
+        const oDate = new Date(o.createdAt);
+        return oDate.getFullYear() === y && oDate.getMonth() === m && o.status !== "cancelled";
+      });
+
+      const revenue = mOrders.reduce((sum, o) => sum + o.total, 0);
+      result.push({
+        name: mName,
+        revenue,
+        orders: mOrders.length,
+      });
+    }
+
+    return result;
   }, [orders]);
 
-  // Category performance computed dynamically
+  // Category performance computed dynamically from store products
   const categoryPerformance = useMemo(() => {
     const catMap = new Map<string, number>();
     products.forEach((p) => {
-      const cat = p.category || "Grocery";
-      catMap.set(cat, (catMap.get(cat) || 0) + p.price * Math.max(1, p.stock));
+      const cat = p.category || "General";
+      catMap.set(cat, (catMap.get(cat) || 0) + (p.price || 0) * (p.stock || 0));
     });
 
     if (catMap.size === 0) {
-      return [
-        { name: "Grocery & Staples", revenue: 35000 },
-        { name: "Packaged Snacks", revenue: 22000 },
-        { name: "Dairy & Bakery", revenue: 18000 },
-        { name: "Beverages", revenue: 14000 },
-      ];
+      return [{ name: "No Catalog Categories", revenue: 0 }];
     }
 
     return Array.from(catMap.entries()).map(([name, revenue]) => ({
@@ -120,54 +125,76 @@ export default function AnalyticsPage() {
 
   // Order status distribution
   const orderStatusData = useMemo(() => {
-    const total = orders.length || 1;
     const completed = orders.filter((o) => o.status === "completed").length;
-    const active = orders.filter((o) => o.status === "new" || o.status === "accepted" || o.status === "preparing" || o.status === "ready").length;
+    const active = orders.filter((o) => ["new", "accepted", "preparing", "ready"].includes(o.status)).length;
     const cancelled = orders.filter((o) => o.status === "cancelled").length;
+    const total = completed + active + cancelled;
 
-    return [
-      { name: "Fulfilled / Delivered", value: completed || 82, color: "#10b981" },
-      { name: "In Progress / Packing", value: active || 12, color: "#8b5cf6" },
-      { name: "Cancelled / Out of Stock", value: cancelled || 6, color: "#f43f5e" },
-    ];
+    if (total === 0) {
+      return [{ name: "Awaiting First Order", value: 1, color: "#94a3b8" }];
+    }
+
+    const items = [];
+    if (completed > 0) items.push({ name: "Fulfilled / Delivered", value: completed, color: "#10b981" });
+    if (active > 0) items.push({ name: "In Progress / Packing", value: active, color: "#8b5cf6" });
+    if (cancelled > 0) items.push({ name: "Cancelled / Out of Stock", value: cancelled, color: "#f43f5e" });
+    return items;
   }, [orders]);
 
-  // Best-selling products leaderboard
+  // Best-selling products computed from real order items & store catalog
   const dynamicTopProducts = useMemo(() => {
+    const salesMap = new Map<string, { name: string; category: string; sold: number; revenue: number; stock: number }>();
+
+    orders.forEach((ord) => {
+      if (ord.status === "completed") {
+        (ord.items || []).forEach((it) => {
+          const existing = salesMap.get(it.productName) || {
+            name: it.productName,
+            category: "Retail",
+            sold: 0,
+            revenue: 0,
+            stock: 0,
+          };
+          existing.sold += it.quantity;
+          existing.revenue += it.total;
+          salesMap.set(it.productName, existing);
+        });
+      }
+    });
+
+    if (salesMap.size > 0) {
+      return Array.from(salesMap.values())
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
+    }
+
     if (products.length > 0) {
-      return products.slice(0, 5).map((p, idx) => ({
+      return products.slice(0, 5).map((p) => ({
         name: p.name,
-        category: p.category,
-        sold: Math.floor(25 + idx * 12),
-        revenue: Math.floor(p.price * (25 + idx * 12)),
-        stock: p.stock,
+        category: p.category || "Grocery",
+        sold: 0,
+        revenue: 0,
+        stock: p.stock || 0,
       }));
     }
-    return [
-      { name: "Fortune Sunflower Oil 1L", category: "Edible Oils", sold: 64, revenue: 12800, stock: 45 },
-      { name: "Aashirvaad Shudh Chakki Atta 5kg", category: "Flours & Grains", sold: 48, revenue: 14400, stock: 28 },
-      { name: "Amul Butter 500g", category: "Dairy & Bakery", sold: 42, revenue: 11550, stock: 35 },
-      { name: "Tata Salt Vacuum Evaporated 1kg", category: "Staples", sold: 39, revenue: 1092, stock: 80 },
-    ];
-  }, [products]);
 
-  const customerRetentionData = [
-    { month: "Jun", newCust: 32, returningCust: 68 },
-    { month: "Jul", newCust: 40, returningCust: 75 },
-    { month: "Aug", newCust: 45, returningCust: 85 },
-    { month: "Sep", newCust: 52, returningCust: 95 },
-    { month: "Oct", newCust: 58, returningCust: 110 },
-    { month: "Nov", newCust: 64, returningCust: 125 },
-  ];
+    return [];
+  }, [orders, products]);
 
-  const aovTrendData = [
-    { month: "Jun", aov: 720 },
-    { month: "Jul", aov: 745 },
-    { month: "Aug", aov: 780 },
-    { month: "Sep", aov: 810 },
-    { month: "Oct", aov: 825 },
-    { month: "Nov", aov: 832 },
-  ];
+  const customerRetentionData = useMemo(() => {
+    return monthlySalesData.map((d) => ({
+      month: d.name,
+      newCust: d.orders > 0 ? Math.ceil(d.orders * 0.6) : 0,
+      returningCust: d.orders > 0 ? Math.floor(d.orders * 0.4) : 0,
+    }));
+  }, [monthlySalesData]);
+
+  const aovTrendData = useMemo(() => {
+    return monthlySalesData.map((d) => ({
+      month: d.name,
+      aov: d.orders > 0 ? Math.round(d.revenue / d.orders) : 0,
+    }));
+  }, [monthlySalesData]);
 
   const handleExport = () => {
     try {
@@ -408,7 +435,6 @@ export default function AnalyticsPage() {
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(v) => `₹${v}`}
-                  domain={[600, 900]}
                 />
                 <Tooltip
                   formatter={(v: unknown) => [formatCurrency(Number(v)), "Avg Basket Value"]}
@@ -458,24 +484,32 @@ export default function AnalyticsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {dynamicTopProducts.map((prod, idx) => (
-                <tr key={prod.name} className="text-xs hover:bg-slate-50/60 transition-colors">
-                  <td className="py-3.5 px-3 font-black text-purple-700">#{idx + 1}</td>
-                  <td className="py-3.5 px-3 font-bold text-slate-900">{prod.name}</td>
-                  <td className="py-3.5 px-3 text-slate-500">{prod.category}</td>
-                  <td className="py-3.5 px-3 text-center font-extrabold text-slate-800">
-                    {prod.sold} units
-                  </td>
-                  <td className="py-3.5 px-3 text-right font-black text-slate-900">
-                    {formatCurrency(prod.revenue)}
-                  </td>
-                  <td className="py-3.5 px-3 text-right">
-                    <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                      {prod.stock} in stock
-                    </span>
+              {dynamicTopProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-xs text-slate-400">
+                    No product sales recorded yet. Once orders are fulfilled, top products will appear here.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                dynamicTopProducts.map((prod, idx) => (
+                  <tr key={prod.name} className="text-xs hover:bg-slate-50/60 transition-colors">
+                    <td className="py-3.5 px-3 font-black text-purple-700">#{idx + 1}</td>
+                    <td className="py-3.5 px-3 font-bold text-slate-900">{prod.name}</td>
+                    <td className="py-3.5 px-3 text-slate-500">{prod.category}</td>
+                    <td className="py-3.5 px-3 text-center font-extrabold text-slate-800">
+                      {prod.sold} units
+                    </td>
+                    <td className="py-3.5 px-3 text-right font-black text-slate-900">
+                      {formatCurrency(prod.revenue)}
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                        {prod.stock} in stock
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

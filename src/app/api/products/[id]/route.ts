@@ -15,11 +15,16 @@ export async function GET(
     const { id } = await params;
     const product = await prisma.product.findUnique({
       where: { id },
-      include: { category: true, variants: true, inventory: true },
+      include: { category: true, variants: true, inventory: true, store: true },
     });
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+
+    // Multi-tenant isolation: ensure product belongs to authenticated seller
+    if (product.store.sellerId !== session.sellerId) {
+      return NextResponse.json({ error: "Forbidden. You do not own this product." }, { status: 403 });
     }
 
     return NextResponse.json({ success: true, product });

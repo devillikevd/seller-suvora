@@ -59,6 +59,7 @@ export async function PUT(request: Request) {
       gstNumber,
       panNumber,
       fssaiNumber,
+      verificationStatus,
       operatingHours,
     } = body;
 
@@ -96,6 +97,7 @@ export async function PUT(request: Request) {
           ...(gstNumber !== undefined ? { gstNumber: gstNumber?.trim() || null } : {}),
           ...(panNumber !== undefined ? { panNumber: panNumber?.trim() || null } : {}),
           ...(fssaiNumber !== undefined ? { fssaiNumber: fssaiNumber?.trim() || null } : {}),
+          ...(verificationStatus ? { verificationStatus } : {}),
         },
       });
 
