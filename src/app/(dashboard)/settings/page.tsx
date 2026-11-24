@@ -70,6 +70,16 @@ export default function SettingsPage() {
     loadMe();
   }, [updateSeller]);
 
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (err) {
+      console.error("Logout network error", err);
+    }
+    logout();
+    router.push("/login");
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -246,10 +256,7 @@ export default function SettingsPage() {
           </div>
 
           <button
-            onClick={() => {
-              logout();
-              router.push("/login");
-            }}
+            onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 transition-colors"
           >
             <LogOut className="w-4 h-4" />

@@ -97,7 +97,12 @@ export function Sidebar() {
     },
   ];
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (err) {
+      console.error("Logout network error", err);
+    }
     logout();
     router.push("/login");
   };

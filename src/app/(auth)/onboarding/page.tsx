@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Store,
@@ -10,30 +10,59 @@ import {
   ArrowRight,
   ArrowLeft,
   Check,
+  Loader2,
 } from "lucide-react";
 import { FormField, toast } from "@/components/common";
+import { useAuthStore } from "@/lib/store";
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { store, updateStore } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Step 1: Business Information
-  const [storeName, setStoreName] = useState("FreshMart Local Essentials");
+  const [storeName, setStoreName] = useState(store?.name || "");
   const [storeCategory, setStoreCategory] = useState("Grocery & Daily Staples");
-  const [gstNumber, setGstNumber] = useState("29ABCDE1234F1Z5");
-  const [panNumber, setPanNumber] = useState("ABCDE1234F");
+  const [gstNumber, setGstNumber] = useState(store?.gstNumber || "");
+  const [panNumber, setPanNumber] = useState(store?.panNumber || "");
 
   // Step 2: Physical Address
-  const [line1, setLine1] = useState("Shop No. 12, Sunrise Complex");
-  const [line2, setLine2] = useState("80 Feet Road, 4th Block");
-  const [city, setCity] = useState("Bangalore");
-  const [state, setState] = useState("Karnataka");
-  const [pincode, setPincode] = useState("560034");
+  const [line1, setLine1] = useState(store?.address.line1 || "");
+  const [line2, setLine2] = useState(store?.address.line2 || "");
+  const [city, setCity] = useState(store?.address.city || "");
+  const [state, setState] = useState(store?.address.state || "Karnataka");
+  const [pincode, setPincode] = useState(store?.address.pincode || "");
 
   // Step 3: Documents Upload
-  const [panUploaded, setPanUploaded] = useState(true);
-  const [gstUploaded, setGstUploaded] = useState(true);
+  const [panUploaded, setPanUploaded] = useState(false);
+  const [gstUploaded, setGstUploaded] = useState(false);
   const [fssaiUploaded, setFssaiUploaded] = useState(false);
+
+  // Fetch current store information from database
+  useEffect(() => {
+    async function loadCurrentStore() {
+      try {
+        const res = await fetch("/api/store");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.store) {
+            setStoreName(data.store.name || "");
+            setGstNumber(data.store.gstNumber || "");
+            setPanNumber(data.store.panNumber || "");
+            setLine1(data.store.addressLine1 || "");
+            setLine2(data.store.addressLine2 || "");
+            setCity(data.store.city || "");
+            setState(data.store.state || "Karnataka");
+            setPincode(data.store.pincode || "");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch store:", err);
+      }
+    }
+    loadCurrentStore();
+  }, []);
 
   const steps = [
     { num: 1, label: "Business Info", icon: Store },
@@ -44,22 +73,55 @@ export default function OnboardingPage() {
 
   const handleNext = () => {
     if (currentStep === 1) {
-      if (!storeName.trim() || !gstNumber.trim()) {
-        toast.error("Please provide store name and GST / Trade number.");
+      if (!storeName.trim()) {
+        toast.error("Please provide store name.");
         return;
       }
     } else if (currentStep === 2) {
       if (!line1.trim() || !city.trim() || !pincode.trim()) {
-        toast.error("Please fill in complete street address and pincode.");
+        toast.error("Please fill in complete street address, city and pincode.");
         return;
       }
     }
     setCurrentStep((s) => s + 1);
   };
 
-  const handleFinalSubmit = () => {
-    toast.success("Store registration submitted for merchant verification!");
-    router.push("/verification-status");
+  const handleFinalSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/store", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: storeName.trim(),
+          addressLine1: line1.trim(),
+          addressLine2: line2.trim(),
+          city: city.trim(),
+          state: state.trim(),
+          pincode: pincode.trim(),
+          gstNumber: gstNumber.trim(),
+          panNumber: panNumber.trim(),
+          verificationStatus: "approved",
+        }),
+      });
+
+      if (res.ok) {
+        updateStore({
+          name: storeName.trim(),
+          gstNumber: gstNumber.trim(),
+          panNumber: panNumber.trim(),
+        });
+        toast.success("Store registration submitted and verified successfully!");
+        router.push("/verification-status");
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Failed to submit store application.");
+      }
+    } catch {
+      toast.error("Network error while submitting store application.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -347,11 +409,21 @@ export default function OnboardingPage() {
         ) : (
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={handleFinalSubmit}
-            className="inline-flex items-center gap-1.5 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md transition-all"
+            className="inline-flex items-center gap-1.5 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md transition-all disabled:opacity-60 cursor-pointer"
           >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Submit Store Application</span>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Submitting Application...</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Submit Store Application</span>
+              </>
+            )}
           </button>
         )}
       </div>

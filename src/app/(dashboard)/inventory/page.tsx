@@ -20,12 +20,13 @@ import {
   FormField,
   toast,
 } from "@/components/common";
-import { useInventoryStore } from "@/lib/store";
+import { useInventoryStore, useProductsStore } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import type { InventoryItem } from "@/types";
 
 export default function InventoryPage() {
   const { inventory, setInventory, stockHistory, adjustStock } = useInventoryStore();
+  const { products, setProducts } = useProductsStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -66,6 +67,14 @@ export default function InventoryPage() {
             );
           }
         }
+
+        const resProd = await fetch("/api/products");
+        if (resProd.ok) {
+          const dataProd = await resProd.json();
+          if (isMounted && Array.isArray(dataProd.products)) {
+            setProducts(dataProd.products);
+          }
+        }
       } catch (err) {
         console.error("Failed to load inventory:", err);
       } finally {
@@ -82,6 +91,10 @@ export default function InventoryPage() {
   const totalStockUnits = useMemo(
     () => inventory.reduce((acc, curr) => acc + curr.available, 0),
     [inventory]
+  );
+  const totalInventoryValue = useMemo(
+    () => products.reduce((acc, curr) => acc + (curr.stock || 0) * (curr.price || 0), 0),
+    [products]
   );
   const lowStockCount = useMemo(
     () => inventory.filter((i) => i.status === "low_stock").length,
@@ -207,7 +220,7 @@ export default function InventoryPage() {
               Total Inventory Value
             </p>
             <h3 className="text-2xl font-black text-slate-900 mt-1">
-              ₹4,25,000
+              ₹{totalInventoryValue.toLocaleString("en-IN")}
             </h3>
             <span className="text-[11px] text-slate-400">At retail catalog price</span>
           </div>

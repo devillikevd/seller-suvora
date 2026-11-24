@@ -158,11 +158,38 @@ export default function DashboardPage() {
   };
 
   const handleExport = () => {
-    toast.success("GST Sales Summary & Order Log downloaded as CSV.", "Report Exported");
+    try {
+      const headers = ["Order Number", "Date", "Customer Name", "Customer Phone", "Items", "Payment Method", "Total (INR)", "Status"];
+      const rows = orders.map((o) => [
+        o.orderNumber,
+        new Date(o.createdAt).toLocaleDateString("en-IN"),
+        `"${(o.customer?.name || "Shopper").replace(/"/g, '""')}"`,
+        `"${o.customer?.phone || ""}"`,
+        (o.items || []).map((i) => `${i.productName} (${i.quantity})`).join("; "),
+        o.paymentMethod.toUpperCase(),
+        Number(o.total || 0).toFixed(2),
+        o.status.toUpperCase(),
+      ]);
+
+      const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `suvora-orders-export-${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success("GST Sales Summary & Order Log downloaded as CSV.", "Report Exported");
+    } catch {
+      toast.error("Failed to export order report.");
+    }
   };
 
   const handleSendMessage = () => {
-    toast.success("Personalized discount offer broadcasted to 291 active shoppers!", "Message Sent");
+    toast.success(`Personalized discount offer broadcasted to ${uniqueCustomersCount || "all"} active shoppers!`, "Message Sent");
   };
 
   return (
@@ -329,20 +356,20 @@ export default function DashboardPage() {
                     {uniqueCustomersCount} customers
                   </h2>
                   <span className="inline-flex items-center text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">
-                    ▲ 37.8% vs. Sept 8, 2021
+                    ▲ {uniqueCustomersCount > 0 ? "100% Verified Shoppers" : "Awaiting First Order"}
                   </span>
                 </div>
               </div>
 
-              {/* Legends matching Bredar (2022 Blue line vs 2021 Dashed Yellow) */}
+              {/* Legends matching Bredar (Current Period vs Prior Period) */}
               <div className="flex items-center gap-4 text-xs font-medium text-slate-500">
                 <span className="flex items-center gap-1.5">
                   <span className="w-3 h-1 bg-blue-600 rounded-full" />
-                  This Year (2022)
+                  This Month
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="w-3 h-0.5 border-b border-dashed border-amber-500" />
-                  Last Year (2021)
+                  Last Month
                 </span>
               </div>
             </div>
@@ -362,7 +389,7 @@ export default function DashboardPage() {
                 <line x1="0" y1="80" x2="600" y2="80" stroke="#F1F5F9" strokeWidth="1" />
                 <line x1="0" y1="130" x2="600" y2="130" stroke="#F1F5F9" strokeWidth="1" />
 
-                {/* 2021 Dashed Yellow Curve */}
+                {/* Prior Period Dashed Yellow Curve */}
                 <path
                   d="M 10 130 Q 80 145 150 115 T 300 100 T 450 75 T 590 60"
                   fill="none"
@@ -372,7 +399,7 @@ export default function DashboardPage() {
                   strokeOpacity="0.75"
                 />
 
-                {/* 2022 Primary Smooth Blue Curve */}
+                {/* Current Period Smooth Blue Curve */}
                 <path
                   d="M 10 120 Q 80 135 150 90 T 300 65 T 450 85 T 590 40 L 590 170 L 10 170 Z"
                   fill="url(#bredarBlueGrad)"
@@ -385,29 +412,29 @@ export default function DashboardPage() {
                   strokeLinecap="round"
                 />
 
-                {/* Highlight Point at May (x=300, y=65) */}
+                {/* Highlight Point at Current Period */}
                 <circle cx="300" cy="65" r="5" fill="#2563EB" stroke="#FFFFFF" strokeWidth="2.5" />
               </svg>
 
-              {/* Floating Tooltip Card like Bredar */}
+              {/* Floating Tooltip Card */}
               <div
                 className="absolute top-8 left-[45%] -translate-x-1/2 bg-white rounded-xl p-2.5 border border-slate-200 shadow-md text-xs pointer-events-none z-10"
               >
                 <div className="font-bold text-slate-800 border-b border-slate-100 pb-1 mb-1">
-                  May 2022
+                  Customer Growth
                 </div>
                 <div className="space-y-0.5 text-[11px]">
                   <div className="flex items-center justify-between gap-3 text-slate-600">
                     <span className="flex items-center gap-1 font-semibold text-blue-600">
-                      ● 2022:
+                      ● Active:
                     </span>
-                    <span className="font-bold text-slate-900">3,500</span>
+                    <span className="font-bold text-slate-900">{uniqueCustomersCount}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3 text-slate-600">
                     <span className="flex items-center gap-1 font-semibold text-amber-500">
-                      ● 2021:
+                      ● Orders:
                     </span>
-                    <span className="font-bold text-slate-900">2,100</span>
+                    <span className="font-bold text-slate-900">{totalOrdersCount}</span>
                   </div>
                 </div>
               </div>

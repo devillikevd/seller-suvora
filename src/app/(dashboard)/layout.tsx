@@ -1,13 +1,11 @@
 "use client";
 
-import React, { Suspense, useEffect, useSyncExternalStore } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { useAuthStore } from "@/lib/store";
-
-const emptySubscribe = () => () => {};
 
 export default function DashboardLayout({
   children,
@@ -15,22 +13,54 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
-  const isClient = useSyncExternalStore(emptySubscribe, () => true, () => false);
+  const { isAuthenticated, login } = useAuthStore();
+  const [checkingAuth, setCheckingAuth] = useState(!isAuthenticated);
 
   useEffect(() => {
-    if (isClient && !isAuthenticated) {
-      router.replace("/login");
-    }
-  }, [isClient, isAuthenticated, router]);
+    let isMounted = true;
 
-  // Prevent access to protected layout if unauthenticated
-  if (!isClient || !isAuthenticated) {
+    async function verifySession() {
+      if (isAuthenticated) {
+        setCheckingAuth(false);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/auth/me");
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.authenticated && data.seller) {
+            if (isMounted) {
+              login(data.seller, data.store);
+              setCheckingAuth(false);
+            }
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Session verification failed:", err);
+      }
+
+      if (isMounted) {
+        setCheckingAuth(false);
+        router.replace("/login");
+      }
+    }
+
+    verifySession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, login, router]);
+
+  // Prevent flicker or unauthorized layout rendering while verifying session
+  if (checkingAuth) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs font-semibold text-slate-500">Checking authorization...</p>
+          <p className="text-xs font-semibold text-slate-500">Authenticating merchant session...</p>
         </div>
       </div>
     );

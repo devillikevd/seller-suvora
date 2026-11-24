@@ -147,8 +147,9 @@ export default function VerifyOtpPage() {
         body: JSON.stringify({
           email,
           phone,
-          fullName: "Merchant",
-          password: "re-send-placeholder",
+          fullName: fullName || "Merchant Owner",
+          storeName: storeName || undefined,
+          password: password || "Seller@123456",
         }),
       });
       const data = await res.json();

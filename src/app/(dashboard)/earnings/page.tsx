@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   IndianRupee,
   Download,
@@ -24,51 +24,143 @@ import {
   ChartCard,
   toast,
 } from "@/components/common";
-import { useFinanceStore } from "@/lib/store";
-import { earningsChartData } from "@/mock/data";
+import { useOrdersStore } from "@/lib/store";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import type { Order, Transaction, Settlement } from "@/types";
 
 export default function EarningsPage() {
-  const { transactions, settlements } = useFinanceStore();
+  const { orders, setOrders } = useOrdersStore();
   const [filterType, setFilterType] = useState<string>("all");
+  const [isLoading, setIsLoading] = useState(orders.length === 0);
 
-  const filteredTransactions = transactions.filter((t) => {
-    if (filterType === "all") return true;
-    return t.type === filterType;
-  });
+  useEffect(() => {
+    async function loadOrders() {
+      try {
+        const res = await fetch("/api/orders");
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.orders)) {
+            setOrders(data.orders);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load orders for earnings:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadOrders();
+  }, [setOrders]);
+
+  // Derive dynamic transactions from real store orders
+  const dynamicTransactions: Transaction[] = useMemo(() => {
+    return orders.map((ord: Order) => {
+      const isCancelled = ord.status === "cancelled";
+      return {
+        id: `TXN-${ord.orderNumber}`,
+        orderId: ord.id,
+        date: ord.createdAt,
+        type: isCancelled ? "refund" : "sale",
+        amount: ord.total,
+        description: isCancelled
+          ? `Order #${ord.orderNumber} Refund`
+          : `Order #${ord.orderNumber} Sale Settlement`,
+        status: ord.status === "completed" ? "completed" : "pending",
+      };
+    });
+  }, [orders]);
+
+  const filteredTransactions = useMemo(() => {
+    return dynamicTransactions.filter((t) => {
+      if (filterType === "all") return true;
+      return t.type === filterType;
+    });
+  }, [dynamicTransactions, filterType]);
 
   // Calculate dynamic totals from actual transaction logs
-  const grossSales = transactions
-    .filter((t) => t.type === "sale")
-    .reduce((sum, t) => sum + t.amount, 0);
+  const grossSales = useMemo(() => {
+    return dynamicTransactions
+      .filter((t) => t.type === "sale")
+      .reduce((sum, t) => sum + t.amount, 0);
+  }, [dynamicTransactions]);
+
   const platformFee = grossSales * 0.05;
-  const customerRefunds = transactions
-    .filter((t) => t.type === "refund")
-    .reduce((sum, t) => sum + t.amount, 0);
+
+  const customerRefunds = useMemo(() => {
+    return dynamicTransactions
+      .filter((t) => t.type === "refund")
+      .reduce((sum, t) => sum + t.amount, 0);
+  }, [dynamicTransactions]);
+
   const netPayout = Math.max(0, grossSales - platformFee - customerRefunds);
 
-  const pendingSettlement = settlements
-    .filter((s) => s.status === "processing" || s.status === "pending")
-    .reduce((sum, s) => sum + s.amount, 0);
-  const completedBankPayouts = settlements
-    .filter((s) => s.status === "completed")
-    .reduce((sum, s) => sum + s.amount, 0);
+  // Group into settlement cycles
+  const dynamicSettlements: Settlement[] = useMemo(() => {
+    if (orders.length === 0) return [];
+    const completedOrders = orders.filter((o) => o.status === "completed");
+    if (completedOrders.length === 0) return [];
+
+    const totalCompleted = completedOrders.reduce((sum, o) => sum + o.total * 0.95, 0);
+    return [
+      {
+        id: "STL-CURRENT-CYCLE",
+        period: "Rolling T+1 Settlement",
+        amount: Math.round(totalCompleted),
+        status: "processing",
+        transactionCount: completedOrders.length,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+  }, [orders]);
+
+  const pendingSettlement = netPayout;
+  const completedBankPayouts = 0;
+
+  // Generate dynamic 7-day chart data from real orders
+  const chartData = useMemo(() => {
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const now = new Date();
+    const result = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(now.getDate() - i);
+      const dayName = days[d.getDay()];
+      const dateStr = d.toISOString().slice(0, 10);
+
+      const dayOrders = orders.filter((o) => {
+        const oDate = new Date(o.createdAt).toISOString().slice(0, 10);
+        return oDate === dateStr && o.status !== "cancelled";
+      });
+
+      const dayGross = dayOrders.reduce((sum, o) => sum + o.total, 0);
+      const dayNet = Math.round(dayGross * 0.95);
+
+      result.push({
+        name: dayName,
+        gross: dayGross,
+        net: dayNet,
+      });
+    }
+
+    return result;
+  }, [orders]);
 
   const handleDownload = () => {
     try {
-      const headers = ["Transaction ID", "Date", "Type", "Description", "Gross Amount (INR)", "Platform Commission (5%)", "Net Settlement (INR)", "Status"];
-      const rows = (transactions.length > 0 ? transactions : [
-        {
-          id: "TXN-DEMO-001",
-          date: new Date().toISOString(),
-          type: "sale",
-          description: "Online Order Gross Sale Settlement",
-          amount: grossSales || 48250,
-          status: "completed",
-        },
-      ]).map((t: any) => [
+      const headers = [
+        "Transaction ID",
+        "Date",
+        "Type",
+        "Description",
+        "Gross Amount (INR)",
+        "Platform Commission (5%)",
+        "Net Settlement (INR)",
+        "Status",
+      ];
+      const rows = dynamicTransactions.map((t) => [
         t.id,
-        new Date(t.date || t.createdAt || Date.now()).toLocaleDateString("en-IN"),
+        new Date(t.date || Date.now()).toLocaleDateString("en-IN"),
         t.type.toUpperCase(),
         `"${(t.description || "").replace(/"/g, '""')}"`,
         Number(t.amount || 0).toFixed(2),
@@ -77,18 +169,25 @@ export default function EarningsPage() {
         (t.status || "completed").toUpperCase(),
       ]);
 
-      const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+      const csvContent =
+        "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
-      link.setAttribute("download", `suvora-financial-statement-${new Date().toISOString().slice(0, 10)}.csv`);
+      link.setAttribute(
+        "download",
+        `suvora-financial-statement-${new Date().toISOString().slice(0, 10)}.csv`
+      );
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      toast.success("GST and Earnings statement exported to CSV file successfully!", "Statement Exported");
+      toast.success(
+        "GST and Earnings statement exported to CSV file successfully!",
+        "Statement Exported"
+      );
     } catch {
       toast.error("Failed to generate financial statement.");
     }
@@ -193,7 +292,7 @@ export default function EarningsPage() {
       >
         <div className="h-72 w-full pt-4">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={earningsChartData}>
+            <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="grossGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.4} />
@@ -332,12 +431,12 @@ export default function EarningsPage() {
           </div>
 
           <div className="space-y-3">
-            {settlements.length === 0 ? (
+            {dynamicSettlements.length === 0 ? (
               <div className="py-10 text-center text-xs text-slate-400">
                 No bank payouts processed yet. Automated payouts occur on a rolling T+1 schedule.
               </div>
             ) : (
-              settlements.map((stl) => (
+              dynamicSettlements.map((stl) => (
                 <div
                   key={stl.id}
                   className="p-4 rounded-xl border border-slate-100 bg-slate-50/60 flex items-center justify-between"

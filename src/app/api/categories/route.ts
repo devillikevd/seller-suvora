@@ -111,3 +111,79 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  try {
+    const session = await getSession();
+    if (!session || !session.sellerId) {
+      return NextResponse.json({ error: "Unauthorized. Please sign in." }, { status: 401 });
+    }
+
+    let storeId = session.storeId;
+    if (!storeId) {
+      const store = await prisma.store.findFirst({ where: { sellerId: session.sellerId } });
+      storeId = store?.id;
+    }
+
+    if (!storeId) {
+      return NextResponse.json({ error: "Store not found." }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const { id, name, description, status } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "Category ID is required." }, { status: 400 });
+    }
+
+    const category = await prisma.category.update({
+      where: { id },
+      data: {
+        ...(name && { name: name.trim() }),
+        ...(description !== undefined && { description: description?.trim() || null }),
+        ...(status && { status }),
+      },
+    });
+
+    return NextResponse.json({ success: true, category });
+  } catch (error: unknown) {
+    const errMessage = error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: errMessage }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const session = await getSession();
+    if (!session || !session.sellerId) {
+      return NextResponse.json({ error: "Unauthorized. Please sign in." }, { status: 401 });
+    }
+
+    let storeId = session.storeId;
+    if (!storeId) {
+      const store = await prisma.store.findFirst({ where: { sellerId: session.sellerId } });
+      storeId = store?.id;
+    }
+
+    if (!storeId) {
+      return NextResponse.json({ error: "Store not found." }, { status: 404 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ error: "Category ID is required." }, { status: 400 });
+    }
+
+    await prisma.category.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true, message: "Category deleted successfully." });
+  } catch (error: unknown) {
+    const errMessage = error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: errMessage }, { status: 500 });
+  }
+}
+
+

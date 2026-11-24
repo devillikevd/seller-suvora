@@ -28,6 +28,16 @@ export function Header() {
   const isStoreOnline = store?.status === "online";
   const unreadNotifs = notifications.filter((n) => !n.read).length;
 
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (err) {
+      console.error("Logout network error", err);
+    }
+    logout();
+    router.push("/login");
+  };
+
   const toggleStoreStatus = () => {
     updateStore({ status: isStoreOnline ? "offline" : "online" });
   };
@@ -207,10 +217,7 @@ export function Header() {
               </div>
               <div className="pt-1 border-t border-[#EFF1F4]">
                 <DropdownMenu.Item
-                  onClick={() => {
-                    logout();
-                    router.push("/login");
-                  }}
+                  onClick={handleLogout}
                   className="flex items-center gap-2 px-3 py-2 text-[#F05A55] rounded-xl hover:bg-rose-50 cursor-pointer font-bold"
                 >
                   <LogOut className="w-4 h-4" />

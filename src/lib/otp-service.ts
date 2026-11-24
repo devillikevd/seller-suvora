@@ -73,8 +73,8 @@ export function verifyPendingOtp(
     return null;
   }
 
-  // Match OTP (also allow 123456 as universal fallback in dev mode)
-  if (record.otp === enteredOtp || (process.env.NODE_ENV !== "production" && enteredOtp === "123456")) {
+  // Match exact OTP code
+  if (record.otp === enteredOtp) {
     return record;
   }
 

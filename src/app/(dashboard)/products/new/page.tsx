@@ -28,7 +28,7 @@ export default function AddProductPage() {
   const [detailedDesc, setDetailedDesc] = useState("");
   const [category, setCategory] = useState("");
   const [brand, setBrand] = useState("");
-  const [sku, setSku] = useState(`FM-${Math.floor(1000 + Math.random() * 9000)}`);
+  const [sku, setSku] = useState(`SUV-${Math.floor(10000 + Math.random() * 90000)}`);
 
   // Media
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
@@ -37,12 +37,12 @@ export default function AddProductPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Pricing
-  const [price, setPrice] = useState<number>(350);
-  const [mrp, setMrp] = useState<number>(400);
+  const [price, setPrice] = useState<number>(0);
+  const [mrp, setMrp] = useState<number>(0);
   const [taxRate, setTaxRate] = useState<number>(5);
 
   // Inventory
-  const [initialStock, setInitialStock] = useState<number>(50);
+  const [initialStock, setInitialStock] = useState<number>(0);
   const [lowStockThreshold, setLowStockThreshold] = useState<number>(10);
   const [trackInventory, setTrackInventory] = useState(true);
 

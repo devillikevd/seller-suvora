@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Grid3x3,
   Plus,
   Edit2,
   Trash2,
   Package,
+  Loader2,
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -17,12 +18,13 @@ import {
   toast,
 } from "@/components/common";
 import { useCategoriesStore } from "@/lib/store";
-import { generateId } from "@/lib/utils";
 import type { Category } from "@/types";
 
 export default function CategoriesPage() {
-  const { categories, addCategory, updateCategory, deleteCategory } = useCategoriesStore();
+  const { categories, setCategories, addCategory, updateCategory, deleteCategory } = useCategoriesStore();
 
+  const [isLoading, setIsLoading] = useState(categories.length === 0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [deleteCatId, setDeleteCatId] = useState<string | null>(null);
@@ -31,6 +33,39 @@ export default function CategoriesPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<"active" | "inactive">("active");
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchCategories() {
+      try {
+        setIsLoading(true);
+        const res = await fetch("/api/categories");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data.categories)) {
+            setCategories(
+              data.categories.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                description: c.description || "",
+                productCount: c._count?.products || 0,
+                status: c.status || "active",
+                createdAt: c.createdAt,
+              }))
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch categories:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    fetchCategories();
+    return () => {
+      isMounted = false;
+    };
+  }, [setCategories]);
 
   const openAddModal = () => {
     setEditingCategory(null);
@@ -48,40 +83,92 @@ export default function CategoriesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       toast.error("Category name is required.");
       return;
     }
 
-    if (editingCategory) {
-      updateCategory(editingCategory.id, {
-        name,
-        description,
-        status,
-      });
-      toast.success("Category updated successfully.");
-    } else {
-      const newCat: Category = {
-        id: generateId("cat"),
-        name,
-        description,
-        productCount: 0,
-        status,
-        createdAt: new Date().toISOString(),
-      };
-      addCategory(newCat);
-      toast.success("New product category added.");
-    }
+    setIsSubmitting(true);
 
-    setIsModalOpen(false);
+    try {
+      if (editingCategory) {
+        const res = await fetch("/api/categories", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editingCategory.id,
+            name: name.trim(),
+            description: description.trim(),
+            status,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || "Failed to update category.");
+          setIsSubmitting(false);
+          return;
+        }
+
+        updateCategory(editingCategory.id, {
+          name: name.trim(),
+          description: description.trim(),
+          status,
+        });
+        toast.success("Category updated successfully in database.");
+      } else {
+        const res = await fetch("/api/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            description: description.trim(),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || "Failed to create category.");
+          setIsSubmitting(false);
+          return;
+        }
+
+        addCategory({
+          id: data.category.id,
+          name: data.category.name,
+          description: data.category.description || "",
+          productCount: 0,
+          status: "active",
+          createdAt: data.category.createdAt,
+        });
+        toast.success("New product category created in database.");
+      }
+
+      setIsModalOpen(false);
+    } catch {
+      toast.error("Network error while saving category.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDelete = () => {
-    if (deleteCatId) {
-      deleteCategory(deleteCatId);
-      toast.success("Category removed.");
+  const handleDelete = async () => {
+    if (!deleteCatId) return;
+
+    try {
+      const res = await fetch(`/api/categories?id=${deleteCatId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        deleteCategory(deleteCatId);
+        toast.success("Category removed from database.");
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Failed to delete category.");
+      }
+    } catch {
+      toast.error("Network error while deleting category.");
+    } finally {
       setDeleteCatId(null);
     }
   };
